@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { StatusPill, SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTime, runIdForReport, summarize } from "@/lib/format";
+import { formatDateTime, runIdForReport, summarize } from "@/lib/format";
 import { useWorkspace, useWorkspaceRuns } from "@/lib/store";
 
 export const Route = createFileRoute("/w/$slug/reports/$reportId")({
@@ -67,7 +67,9 @@ function ReportPage() {
         </h1>
         <p className="mt-1 text-lg text-paper-muted">External Exposure Review</p>
         <p className="mt-2 font-mono text-xs text-paper-muted">
-          {run.domain} · {formatDate(run.observedAt)} · {run.checkset}
+          {run.domain} · Observed {formatDateTime(run.observedAt)} · {run.checkset}{" "}
+          · {run.checksetVersion} · Observations completed: {summary.completed}/
+          {summary.total}
         </p>
 
         <div className="mt-8 border-t border-paper-fg/10 pt-6">
@@ -76,8 +78,8 @@ function ReportPage() {
           </div>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-paper-muted">
             This report summarizes publicly observable conditions at the time of
-            the review. Individual observations are not an overall security
-            grade.
+            the review. What these public checks observed about this hostname.
+            Individual observations are not an overall security grade.
           </p>
         </div>
 

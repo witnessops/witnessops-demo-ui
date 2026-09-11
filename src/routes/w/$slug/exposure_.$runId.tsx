@@ -1,9 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import { ActivationPanel } from "@/components/activation-panel";
+import { ChangeDigestLines } from "@/components/change-digest";
 import { ObservationList } from "@/components/observation-list";
 import { RunningCheck } from "@/components/running-check";
 import { SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
+import { digestRunChange } from "@/lib/diff";
 import { formatDateTime, reportIdForRun, summarize } from "@/lib/format";
 import {
   isOwner,
@@ -24,7 +27,6 @@ function ExposureRunPage() {
   const membership = useMembership(workspace?.id);
   const runs = useWorkspaceRuns(workspace?.id);
   const run = runs.find((item) => item.id === runId);
-  const startRun = useAppStore((state) => state.startRun);
   const completeRun = useAppStore((state) => state.completeRun);
   const running = useAppStore((state) => state.running);
   const owner = isOwner(membership?.role);
@@ -35,6 +37,7 @@ function ExposureRunPage() {
     return (
       <RunningCheck
         domain={running.domain}
+        checkIds={running.checkIds}
         onDone={() => {
           const next = completeRun();
           if (next) {
@@ -65,6 +68,9 @@ function ExposureRunPage() {
   }
 
   const summary = summarize(run.observations);
+  const runIndex = runs.findIndex((item) => item.id === run.id);
+  const previous = runIndex >= 0 ? runs[runIndex + 1] : undefined;
+  const digest = digestRunChange(run, previous);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -82,17 +88,43 @@ function ExposureRunPage() {
       </h1>
       <p className="mt-3 text-sm text-fg-muted">
         Observed {formatDateTime(run.observedAt)} · {run.checkset} ·{" "}
-        {summary.completed}/{summary.total} observations completed
+        {run.checksetVersion} · Observations completed: {summary.completed}/
+        {summary.total}
         {run.savedAt
           ? ` · Saved to ${workspace.name} ${formatDateTime(run.savedAt)}`
           : null}
       </p>
       <p className="mt-2 text-sm text-fg-muted">
-        What ten public checks observed about this hostname. This is not a
+        What these public checks observed about this hostname. This is not a
         complete security assessment.
       </p>
+
+      {!workspace.exposureActive && owner ? (
+        <div className="mt-6">
+          <ActivationPanel
+            workspaceId={workspace.id}
+            compact
+            onActivated={() =>
+              void navigate({
+                to: "/w/$slug/exposure/new",
+                params: { slug },
+                search: { edit: true },
+              })
+            }
+          />
+        </div>
+      ) : null}
+
       <div className="mt-6 rounded-xl border border-border bg-surface p-5">
         <SummaryCounts summary={summary} />
+        {previous ? (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-fg">Since previous run</p>
+            <div className="mt-2">
+              <ChangeDigestLines digest={digest} />
+            </div>
+          </div>
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           <Button asChild>
             <Link
@@ -102,17 +134,11 @@ function ExposureRunPage() {
               View report
             </Link>
           </Button>
-          {owner ? (
-            <Button
-              variant="secondary"
-              onClick={() =>
-                startRun({
-                  domain: run.domain,
-                  workspaceId: workspace.id,
-                })
-              }
-            >
-              Run again
+          {owner && workspace.exposureActive ? (
+            <Button variant="secondary" asChild>
+              <Link to="/w/$slug/exposure/new" params={{ slug }}>
+                Run again
+              </Link>
             </Button>
           ) : null}
           <Button variant="ghost" asChild>

@@ -1,3 +1,4 @@
+import { PUBLIC_CHECK_IDS } from "./checks";
 import type { Observation, ObservationStatus } from "./types";
 
 type Variant = "latest" | "mid" | "early";
@@ -29,8 +30,8 @@ function interpolate(template: string, domain: string) {
 const SPECS: Spec[] = [
   {
     id: "dns",
-    category: "DNS",
-    name: "Authoritative DNS answers",
+    category: "Domain & DNS",
+    name: "DNS configuration",
     method: "Unauthenticated DNS query",
     checked:
       "Whether public resolvers receive authoritative answers for {domain} on common record types used to locate the service.",
@@ -75,8 +76,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "tls",
-    category: "TLS",
-    name: "Publicly trusted TLS certificate",
+    category: "Web presence",
+    name: "TLS & certificates",
     method: "TLS handshake observation",
     checked:
       "Whether the hostname presents a valid publicly trusted TLS certificate during an unauthenticated handshake.",
@@ -123,8 +124,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "headers",
-    category: "HTTP security headers",
-    name: "Apex HTTP security headers",
+    category: "Web presence",
+    name: "HTTP security headers",
     method: "Unauthenticated HTTPS GET of the apex response",
     checked:
       "Which commonly used HTTP security headers are present on the apex HTTPS response for {domain}.",
@@ -170,54 +171,124 @@ const SPECS: Spec[] = [
     },
   },
   {
-    id: "email",
-    category: "Email authentication",
-    name: "SPF and DMARC publication",
-    method: "DNS TXT lookup for SPF and DMARC",
-    checked:
-      "Whether {domain} publishes SPF and DMARC records, and what policy those records declare.",
+    id: "spf",
+    category: "Email",
+    name: "SPF",
+    method: "DNS TXT lookup for SPF",
+    checked: "Whether {domain} publishes an SPF record, and what it declares.",
     whyItMatters:
-      "Published email authentication records are a public control against messages that claim to come from the domain. A policy of p=none monitors and does not instruct receivers to reject unauthenticated mail.",
+      "A published SPF record is a public instruction to receiving mail servers about which hosts may send mail for the domain.",
     remainsUnknown:
-      "Publication is not proof that mail is well handled operationally. DKIM selector effectiveness and mailbox provider behaviour were not established.",
+      "Publication is not proof that mail is well handled operationally, or that every sending path is covered.",
     variants: {
       latest: {
-        status: "needs_attention",
-        summary: "SPF is published. DMARC is present with p=none.",
+        status: "clear",
+        summary: "SPF is published for {domain}.",
         observed:
-          "A SPF TXT record was published for {domain}. A DMARC record was present at _dmarc.{domain} with policy p=none. DKIM selectors were not confirmed by this checkset.",
+          "A SPF TXT record was published for {domain}. The record used a soft-fail all mechanism.",
         evidence: [
+          { label: "Name", value: "{domain}" },
           { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
-          { label: "DMARC", value: "v=DMARC1; p=none; rua=mailto:dmarc@{domain}" },
-          { label: "DKIM", value: "Not confirmed" },
         ],
       },
       mid: {
-        status: "needs_attention",
-        summary: "SPF is published. DMARC is present with p=none.",
-        observed:
-          "SPF was published. DMARC policy was p=none.",
+        status: "clear",
+        summary: "SPF is published for {domain}.",
+        observed: "A SPF TXT record was published for {domain}.",
         evidence: [
           { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
-          { label: "DMARC", value: "v=DMARC1; p=none" },
         ],
       },
       early: {
-        status: "needs_attention",
-        summary: "SPF is published. No DMARC record was observed.",
-        observed:
-          "A SPF record was published for {domain}. No DMARC TXT record was observed at _dmarc.{domain}.",
+        status: "clear",
+        summary: "SPF is published for {domain}.",
+        observed: "A SPF TXT record was published for {domain}.",
         evidence: [
           { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
-          { label: "DMARC", value: "Not present" },
         ],
       },
     },
   },
   {
+    id: "dkim",
+    category: "Email",
+    name: "DKIM",
+    method: "DNS TXT lookup for common DKIM selectors",
+    checked:
+      "Whether common DKIM selector names for {domain} return a public key record.",
+    whyItMatters:
+      "Visible DKIM selectors are a public signal that the domain can sign mail. Their absence from common names is not proof that no selector exists.",
+    remainsUnknown:
+      "Only a short list of common selector names was queried. A missing common selector does not establish that mail is unsigned.",
+    variants: {
+      latest: {
+        status: "informational",
+        summary: "No common DKIM selector was confirmed for {domain}.",
+        observed:
+          "TXT lookups for selector names default._domainkey, s1._domainkey and google._domainkey on {domain} did not return a public key. Other selectors were not queried.",
+        evidence: [
+          { label: "Selectors queried", value: "default, s1, google" },
+          { label: "Result", value: "No DKIM TXT observed" },
+        ],
+      },
+      mid: {
+        status: "informational",
+        summary: "No common DKIM selector was confirmed for {domain}.",
+        observed:
+          "Common DKIM selector names did not return a public key record.",
+        evidence: [
+          { label: "Selectors queried", value: "default, s1, google" },
+        ],
+      },
+      early: {
+        present: false,
+        status: "informational",
+        summary: "",
+        observed: "",
+        evidence: [],
+      },
+    },
+  },
+  {
+    id: "dmarc",
+    category: "Email",
+    name: "DMARC",
+    method: "DNS TXT lookup for DMARC",
+    checked:
+      "Whether {domain} publishes a DMARC record, and what policy that record declares.",
+    whyItMatters:
+      "A DMARC policy is a public instruction to receivers about unauthenticated mail that claims to come from the domain. A policy of p=none monitors and does not instruct receivers to reject.",
+    remainsUnknown:
+      "Publication is not proof that reports are read, or that mailbox providers honour the policy.",
+    variants: {
+      latest: {
+        status: "needs_attention",
+        summary: "DMARC is present with p=none.",
+        observed:
+          "A DMARC record was present at _dmarc.{domain} with policy p=none. Receivers are asked to monitor, not to reject unauthenticated mail.",
+        evidence: [
+          { label: "Name", value: "_dmarc.{domain}" },
+          { label: "DMARC", value: "v=DMARC1; p=none; rua=mailto:dmarc@{domain}" },
+        ],
+      },
+      mid: {
+        status: "needs_attention",
+        summary: "DMARC is present with p=none.",
+        observed: "DMARC policy was p=none.",
+        evidence: [{ label: "DMARC", value: "v=DMARC1; p=none" }],
+      },
+      early: {
+        status: "needs_attention",
+        summary: "No DMARC record was observed.",
+        observed: "No DMARC TXT record was observed at _dmarc.{domain}.",
+        evidence: [{ label: "DMARC", value: "Not present" }],
+      },
+    },
+  },
+  {
     id: "services",
-    category: "Exposed services",
-    name: "Commonly observed public ports",
+    category: "Public exposure",
+    name: "Publicly observable services",
     method: "Low-impact TCP connect to a short allowlisted port set",
     checked:
       "Whether a small allowlisted set of commonly exposed ports on the public address of {domain} accepted a connection.",
@@ -263,8 +334,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "tech",
-    category: "Public technology signals",
-    name: "Publicly visible technology hints",
+    category: "Web presence",
+    name: "Public technology signals",
     method: "Inspection of public HTTP response headers and HTML references",
     checked:
       "Which technology signals are visible in public HTTP headers and HTML for {domain}, without logging in.",
@@ -287,8 +358,7 @@ const SPECS: Spec[] = [
       mid: {
         status: "informational",
         summary: "Public HTML referenced a frontend bundle and a cloud CDN.",
-        observed:
-          "Public HTML referenced a frontend bundle and a cloud CDN.",
+        observed: "Public HTML referenced a frontend bundle and a cloud CDN.",
         evidence: [
           { label: "Server header", value: "nginx" },
           { label: "CDN host", value: "cdn.{domain}" },
@@ -305,8 +375,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "securitytxt",
-    category: "security.txt",
-    name: "Published security.txt",
+    category: "Web presence",
+    name: "security.txt",
     method: "HTTPS GET of /.well-known/security.txt",
     checked:
       "Whether {domain} publishes a security.txt file at the well-known path, and whether a contact is present.",
@@ -348,8 +418,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "certificate",
-    category: "Certificate observations",
-    name: "Certificate names and validity window",
+    category: "Domain & DNS",
+    name: "Certificate transparency",
     method: "Inspection of the presented certificate and public CT log query",
     checked:
       "Which names appear on the presented certificate for {domain}, whether it is currently within its validity window, and whether a matching certificate is visible in public CT logs.",
@@ -394,8 +464,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "domain",
-    category: "Domain configuration",
-    name: "CAA and apex delegation",
+    category: "Domain & DNS",
+    name: "Domain observations",
     method: "DNS lookup for CAA and NS at the apex",
     checked:
       "Whether {domain} publishes CAA, and whether the apex NS set looks like an ordinary delegation rather than an unexpected cut.",
@@ -417,8 +487,7 @@ const SPECS: Spec[] = [
       mid: {
         status: "clear",
         summary: "CAA is published. Apex NS set matches the expected pair.",
-        observed:
-          "CAA permitted letsencrypt.org. Apex NS matched the expected pair.",
+        observed: "CAA permitted letsencrypt.org. Apex NS matched the expected pair.",
         evidence: [
           { label: "CAA", value: '0 issue "letsencrypt.org"' },
           { label: "NS", value: "ns1.{domain}, ns2.{domain}" },
@@ -435,8 +504,8 @@ const SPECS: Spec[] = [
   },
   {
     id: "exposure",
-    category: "Publicly observable exposure",
-    name: "Common administrative paths",
+    category: "Public exposure",
+    name: "Common exposed interfaces",
     method: "Unauthenticated GET of a short list of commonly guessed paths",
     checked:
       "Whether a short list of commonly guessed administrative paths on {domain} returned an obvious unauthenticated application surface.",
@@ -482,19 +551,16 @@ const SPECS: Spec[] = [
   },
 ];
 
-export const CHECK_STEPS = SPECS.map((spec) => ({
-  id: spec.id,
-  name: spec.name,
-  category: spec.category,
-}));
-
 export function buildObservations(
   domain: string,
   variant: Variant,
   observedAt: string,
+  checkIds?: string[],
 ): Observation[] {
+  const allowed = checkIds ? new Set(checkIds) : null;
   const observations: Observation[] = [];
   for (const spec of SPECS) {
+    if (allowed && !allowed.has(spec.id)) continue;
     const v = spec.variants[variant];
     if (v.present === false) continue;
     observations.push({
@@ -518,53 +584,79 @@ export function buildObservations(
   return observations;
 }
 
-export function observationsForDomain(domain: string, observedAt: string) {
+function applyDomainOverrides(domain: string, observations: Observation[]) {
   const host = domain.toLowerCase();
   if (host === "jonesmfg.com") {
-    return buildObservations(host, "latest", observedAt).map((obs) => {
-      if (obs.id === "headers" || obs.id === "email") {
+    return observations.map((obs) => {
+      if (obs.id === "headers") {
         return {
           ...obs,
           status: "clear" as const,
-          summary:
-            obs.id === "headers"
-              ? "HSTS and a restrictive CSP were present on the apex response."
-              : "SPF is published. DMARC policy is p=quarantine.",
-          observed:
-            obs.id === "headers"
-              ? `The apex HTTPS response for ${host} included Strict-Transport-Security and Content-Security-Policy.`
-              : `SPF and DMARC were published for ${host}. DMARC policy was p=quarantine.`,
-          evidence:
-            obs.id === "headers"
-              ? [
-                  { label: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-                  { label: "Content-Security-Policy", value: "default-src 'self'" },
-                ]
-              : [
-                  { label: "SPF", value: `v=spf1 include:_spf.${host} -all` },
-                  { label: "DMARC", value: `v=DMARC1; p=quarantine` },
-                ],
+          summary: "HSTS and a restrictive CSP were present on the apex response.",
+          observed: `The apex HTTPS response for ${host} included Strict-Transport-Security and Content-Security-Policy.`,
+          evidence: [
+            {
+              label: "Strict-Transport-Security",
+              value: "max-age=31536000; includeSubDomains",
+            },
+            { label: "Content-Security-Policy", value: "default-src 'self'" },
+          ],
+        };
+      }
+      if (obs.id === "dmarc") {
+        return {
+          ...obs,
+          status: "clear" as const,
+          summary: "DMARC policy is p=quarantine.",
+          observed: `DMARC was published for ${host}. Policy was p=quarantine.`,
+          evidence: [{ label: "DMARC", value: "v=DMARC1; p=quarantine" }],
+        };
+      }
+      if (obs.id === "spf") {
+        return {
+          ...obs,
+          status: "clear" as const,
+          summary: "SPF is published with a hard-fail all mechanism.",
+          observed: `SPF was published for ${host}.`,
+          evidence: [{ label: "SPF", value: `v=spf1 include:_spf.${host} -all` }],
         };
       }
       return obs;
     });
   }
   if (host === "mymsp.io") {
-    return buildObservations(host, "latest", observedAt).map((obs) => {
-      if (obs.id === "email") {
+    return observations.map((obs) => {
+      if (obs.id === "dmarc") {
         return {
           ...obs,
           status: "clear" as const,
-          summary: "SPF is published. DMARC policy is p=reject.",
-          observed: `SPF and DMARC were published for ${host}. DMARC policy was p=reject.`,
-          evidence: [
-            { label: "SPF", value: `v=spf1 include:_spf.${host} -all` },
-            { label: "DMARC", value: "v=DMARC1; p=reject" },
-          ],
+          summary: "DMARC policy is p=reject.",
+          observed: `DMARC was published for ${host}. Policy was p=reject.`,
+          evidence: [{ label: "DMARC", value: "v=DMARC1; p=reject" }],
+        };
+      }
+      if (obs.id === "spf") {
+        return {
+          ...obs,
+          status: "clear" as const,
+          summary: "SPF is published with a hard-fail all mechanism.",
+          observed: `SPF was published for ${host}.`,
+          evidence: [{ label: "SPF", value: `v=spf1 include:_spf.${host} -all` }],
         };
       }
       return obs;
     });
   }
-  return buildObservations(host, "latest", observedAt);
+  return observations;
+}
+
+export function observationsForDomain(
+  domain: string,
+  observedAt: string,
+  checkIds: string[] = PUBLIC_CHECK_IDS,
+) {
+  return applyDomainOverrides(
+    domain,
+    buildObservations(domain.toLowerCase(), "latest", observedAt, checkIds),
+  );
 }

@@ -6,6 +6,7 @@ import { StatusPill, SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PUBLIC_CHECK_IDS, publicCheckset } from "@/lib/checks";
 import { formatDateTime, summarize } from "@/lib/format";
 import { observationsForDomain } from "@/lib/observations";
 import { FROZEN_OBSERVED_AT } from "@/lib/seed";
@@ -43,18 +44,22 @@ function PublicCheckPage() {
   function finishRun() {
     const observedAt =
       domain === "acme.com" ? FROZEN_OBSERVED_AT : new Date().toISOString();
-    const observations = observationsForDomain(domain, observedAt);
+    const observations = observationsForDomain(
+      domain,
+      observedAt,
+      PUBLIC_CHECK_IDS,
+    );
     setResult({ domain, observedAt, observations });
     setPhase("done");
   }
 
   function save() {
     if (!result) return;
+    const meta = publicCheckset();
     setPendingSave({
       domain: result.domain,
       observedAt: result.observedAt,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      ...meta,
       observations: result.observations,
     });
     if (signedIn) {
@@ -68,7 +73,11 @@ function PublicCheckPage() {
     <PublicShell path="/check">
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
         {phase === "running" ? (
-          <RunningCheck domain={domain} onDone={finishRun} />
+          <RunningCheck
+            domain={domain}
+            checkIds={PUBLIC_CHECK_IDS}
+            onDone={finishRun}
+          />
         ) : null}
 
         {phase === "idle" ? (
@@ -77,11 +86,11 @@ function PublicCheckPage() {
               Public External Exposure check
             </p>
             <h1 className="mt-3 text-3xl font-medium tracking-tight sm:text-4xl">
-              What ten public checks observe about a hostname.
+              What public checks observe about a hostname.
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-              Unauthenticated observations only. This is not a penetration test,
-              and it does not produce a security score.
+              A bounded, unauthenticated snapshot. This is not a penetration
+              test, and it does not produce a security score.
             </p>
             <form className="mt-8 grid gap-3" onSubmit={run}>
               <Label htmlFor="public-domain">Hostname</Label>
@@ -109,8 +118,8 @@ function PublicCheckPage() {
               {result.domain}
             </h1>
             <p className="mt-2 text-sm text-fg-muted">
-              Observed {formatDateTime(result.observedAt)} · External Exposure
-              1.0 · {result.observations.length}/{result.observations.length}{" "}
+              Observed {formatDateTime(result.observedAt)} · Public snapshot ·{" "}
+              {result.observations.length}/{result.observations.length}{" "}
               observations completed
             </p>
             <div className="mt-6">
@@ -124,7 +133,8 @@ function PublicCheckPage() {
             </div>
             <p className="mt-4 max-w-xl text-xs leading-relaxed text-fg-subtle">
               Saving stores this observation in a workspace. It does not rerun
-              the checks or create new evidence.
+              the checks or create new evidence. History and repeat checks are
+              kept in the workspace.
             </p>
             <ul className="mt-8 divide-y divide-border rounded-xl border border-border bg-surface">
               {result.observations.map((obs) => (

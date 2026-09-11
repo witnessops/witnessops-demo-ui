@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { CHECK_STEPS } from "@/lib/observations";
+import { PUBLIC_CHECK_IDS, stepsForIds } from "@/lib/checks";
 import { cn } from "@/lib/utils";
 
 export function RunningCheck({
   domain,
+  checkIds = PUBLIC_CHECK_IDS,
   onDone,
 }: {
   domain: string;
+  checkIds?: string[];
   onDone: () => void;
 }) {
+  const steps = stepsForIds(checkIds);
   const [index, setIndex] = useState(0);
   const doneRef = useRef(false);
   const onDoneRef = useRef(onDone);
@@ -23,13 +26,13 @@ export function RunningCheck({
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
+    if (reduce || steps.length === 0) {
       finish();
       return;
     }
     const id = window.setInterval(() => {
       setIndex((current) => {
-        if (current >= CHECK_STEPS.length - 1) {
+        if (current >= steps.length - 1) {
           window.clearInterval(id);
           window.setTimeout(finish, 280);
           return current;
@@ -38,20 +41,20 @@ export function RunningCheck({
       });
     }, 220);
     return () => window.clearInterval(id);
-  }, []);
+  }, [steps.length]);
 
   return (
     <div className="mx-auto max-w-lg py-10">
-      <p className="font-mono text-xs text-fg-subtle">External Exposure 1.0</p>
+      <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
       <h1 className="mt-2 text-2xl font-medium tracking-tight">
         Observing {domain}
       </h1>
       <p className="mt-2 text-sm text-fg-muted">
-        Ten public checks. Unauthenticated. The result is a snapshot at this
-        time, not a security grade.
+        {steps.length} public checks. Unauthenticated. The result is a snapshot
+        at this time, not a security grade.
       </p>
       <ol className="mt-8 grid gap-1.5">
-        {CHECK_STEPS.map((step, i) => {
+        {steps.map((step, i) => {
           const done = i < index;
           const active = i === index;
           return (

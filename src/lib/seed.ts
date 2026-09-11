@@ -1,3 +1,10 @@
+import {
+  ALL_CHECK_IDS,
+  PUBLIC_CHECK_IDS,
+  publicCheckset,
+  subscribedCheckProfile,
+  workspaceCheckset,
+} from "./checks";
 import { buildObservations, observationsForDomain } from "./observations";
 import type { ExposureRun, Member, User, Workspace } from "./types";
 
@@ -21,6 +28,8 @@ export const ACME_WORKSPACE: Workspace = {
   primaryDomain: "acme.com",
   createdAt: "2026-08-12T10:00:00.000Z",
   mark: "#c8b896",
+  exposureActive: true,
+  checkProfile: subscribedCheckProfile(),
 };
 
 export const MSP_WORKSPACE: Workspace = {
@@ -30,6 +39,8 @@ export const MSP_WORKSPACE: Workspace = {
   primaryDomain: "mymsp.io",
   createdAt: "2026-06-02T10:00:00.000Z",
   mark: "#8fa3b8",
+  exposureActive: true,
+  checkProfile: subscribedCheckProfile(),
 };
 
 export const JONES_WORKSPACE: Workspace = {
@@ -39,13 +50,12 @@ export const JONES_WORKSPACE: Workspace = {
   primaryDomain: "jonesmfg.com",
   createdAt: "2026-07-18T10:00:00.000Z",
   mark: "#9aab8e",
+  exposureActive: true,
+  checkProfile: subscribedCheckProfile(),
 };
 
 export function companionWorkspaces(): Workspace[] {
-  return [
-    { ...MSP_WORKSPACE },
-    { ...JONES_WORKSPACE },
-  ];
+  return [{ ...MSP_WORKSPACE }, { ...JONES_WORKSPACE }];
 }
 
 export function companionMembers(user: User): Member[] {
@@ -78,83 +88,90 @@ export function companionMembers(user: User): Member[] {
 }
 
 export function companionRuns(): ExposureRun[] {
+  const mspMeta = workspaceCheckset(ALL_CHECK_IDS);
+  const jonesMeta = workspaceCheckset(ALL_CHECK_IDS);
+  const jonesPrevIds = ALL_CHECK_IDS.filter((id) => id !== "dkim" && id !== "domain");
   return [
     {
       id: "run-msp-1",
       workspaceId: MSP_WORKSPACE.id,
       domain: "mymsp.io",
       observedAt: MSP_AT,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      ...mspMeta,
       initiator: "Karol",
       status: "completed",
       source: "workspace",
-      observations: observationsForDomain("mymsp.io", MSP_AT),
+      observations: observationsForDomain("mymsp.io", MSP_AT, ALL_CHECK_IDS),
     },
     {
       id: "run-jones-2",
       workspaceId: JONES_WORKSPACE.id,
       domain: "jonesmfg.com",
       observedAt: JONES_LATEST_AT,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      ...jonesMeta,
       initiator: "Dana Jones",
       status: "completed",
       source: "workspace",
-      observations: observationsForDomain("jonesmfg.com", JONES_LATEST_AT),
+      observations: observationsForDomain("jonesmfg.com", JONES_LATEST_AT, ALL_CHECK_IDS),
     },
     {
       id: "run-jones-1",
       workspaceId: JONES_WORKSPACE.id,
       domain: "jonesmfg.com",
       observedAt: JONES_PREV_AT,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      checkset: "Workspace profile",
+      checksetVersion: `${jonesPrevIds.length}-checks`,
+      checkIds: jonesPrevIds,
       initiator: "Dana Jones",
       status: "completed",
       source: "workspace",
-      observations: buildObservations("jonesmfg.com", "mid", JONES_PREV_AT),
+      observations: buildObservations("jonesmfg.com", "mid", JONES_PREV_AT, jonesPrevIds),
     },
   ];
 }
 
 export function acmeHistoryRuns(workspaceId: string): ExposureRun[] {
+  const latestMeta = workspaceCheckset(ALL_CHECK_IDS);
+  const midIds = ALL_CHECK_IDS.filter((id) => id !== "dkim");
+  const earlyIds = PUBLIC_CHECK_IDS.filter((id) => id !== "tech" && id !== "securitytxt");
   return [
     {
       id: "run-4",
       workspaceId,
       domain: "acme.com",
       observedAt: FROZEN_OBSERVED_AT,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      ...latestMeta,
       initiator: "Karol",
       status: "completed",
       source: "workspace",
-      observations: buildObservations("acme.com", "latest", FROZEN_OBSERVED_AT),
+      observations: buildObservations("acme.com", "latest", FROZEN_OBSERVED_AT, ALL_CHECK_IDS),
     },
     {
       id: "run-3",
       workspaceId,
       domain: "acme.com",
       observedAt: RUN3_AT,
-      checkset: "External Exposure 1.0",
-      checksetVersion: "1.0",
+      checkset: "Workspace profile",
+      checksetVersion: `${midIds.length}-checks`,
+      checkIds: midIds,
       initiator: "Karol",
       status: "completed",
       source: "workspace",
-      observations: buildObservations("acme.com", "mid", RUN3_AT),
+      observations: buildObservations("acme.com", "mid", RUN3_AT, midIds),
     },
     {
       id: "run-2",
       workspaceId,
       domain: "acme.com",
       observedAt: RUN2_AT,
-      checkset: "External Exposure 0.9",
-      checksetVersion: "0.9",
+      ...publicCheckset(),
+      checkIds: earlyIds,
+      checkset: "Public snapshot",
+      checksetVersion: "public",
       initiator: "Karol",
       status: "completed",
       source: "workspace",
-      observations: buildObservations("acme.com", "early", RUN2_AT),
+      observations: buildObservations("acme.com", "early", RUN2_AT, earlyIds),
     },
   ];
 }

@@ -20,6 +20,7 @@ import { Route as WSlugExposureRouteImport } from './routes/w/$slug/exposure'
 import { Route as WSlugMembersRouteImport } from './routes/w/$slug/members'
 import { Route as WSlugSettingsRouteImport } from './routes/w/$slug/settings'
 import { Route as WSlugExposureRunIdRouteImport } from './routes/w/$slug/exposure_.$runId'
+import { Route as WSlugExposureNewRouteImport } from './routes/w/$slug/exposure_.new'
 import { Route as WSlugReportsReportIdRouteImport } from './routes/w/$slug/reports.$reportId'
 import { Route as WSlugExposureRunIdObsIdRouteImport } from './routes/w/$slug/exposure_.$runId_.$obsId'
 
@@ -78,6 +79,11 @@ const WSlugExposureRunIdRoute = WSlugExposureRunIdRouteImport.update({
   path: '/exposure/$runId',
   getParentRoute: () => WSlugRoute,
 } as any)
+const WSlugExposureNewRoute = WSlugExposureNewRouteImport.update({
+  id: '/exposure_/new',
+  path: '/exposure/new',
+  getParentRoute: () => WSlugRoute,
+} as any)
 const WSlugReportsReportIdRoute = WSlugReportsReportIdRouteImport.update({
   id: '/reports/$reportId',
   path: '/reports/$reportId',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
   '/w/$slug/exposure/$runId': typeof WSlugExposureRunIdRoute
+  '/w/$slug/exposure/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
   '/w/$slug/exposure/$runId/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug': typeof WSlugIndexRoute
   '/w/$slug/exposure/$runId': typeof WSlugExposureRunIdRoute
+  '/w/$slug/exposure/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
   '/w/$slug/exposure/$runId/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
   '/w/$slug/exposure_/$runId': typeof WSlugExposureRunIdRoute
+  '/w/$slug/exposure_/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
   '/w/$slug/exposure_/$runId_/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | '/w/$slug/settings'
     | '/w/$slug/'
     | '/w/$slug/exposure/$runId'
+    | '/w/$slug/exposure/new'
     | '/w/$slug/reports/$reportId'
     | '/w/$slug/exposure/$runId/$obsId'
   fileRoutesByTo: FileRoutesByTo
@@ -162,6 +172,7 @@ export interface FileRouteTypes {
     | '/w/$slug/settings'
     | '/w/$slug'
     | '/w/$slug/exposure/$runId'
+    | '/w/$slug/exposure/new'
     | '/w/$slug/reports/$reportId'
     | '/w/$slug/exposure/$runId/$obsId'
   id:
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/w/$slug/settings'
     | '/w/$slug/'
     | '/w/$slug/exposure_/$runId'
+    | '/w/$slug/exposure_/new'
     | '/w/$slug/reports/$reportId'
     | '/w/$slug/exposure_/$runId_/$obsId'
   fileRoutesById: FileRoutesById
@@ -269,6 +281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugExposureRunIdRouteImport
       parentRoute: typeof WSlugRoute
     }
+    '/w/$slug/exposure_/new': {
+      id: '/w/$slug/exposure_/new'
+      path: '/exposure/new'
+      fullPath: '/w/$slug/exposure/new'
+      preLoaderRoute: typeof WSlugExposureNewRouteImport
+      parentRoute: typeof WSlugRoute
+    }
     '/w/$slug/reports/$reportId': {
       id: '/w/$slug/reports/$reportId'
       path: '/reports/$reportId'
@@ -292,6 +311,7 @@ interface WSlugRouteChildren {
   WSlugSettingsRoute: typeof WSlugSettingsRoute
   WSlugIndexRoute: typeof WSlugIndexRoute
   WSlugExposureRunIdRoute: typeof WSlugExposureRunIdRoute
+  WSlugExposureNewRoute: typeof WSlugExposureNewRoute
   WSlugReportsReportIdRoute: typeof WSlugReportsReportIdRoute
   WSlugExposureRunIdObsIdRoute: typeof WSlugExposureRunIdObsIdRoute
 }
@@ -302,6 +322,7 @@ const WSlugRouteChildren: WSlugRouteChildren = {
   WSlugSettingsRoute: WSlugSettingsRoute,
   WSlugIndexRoute: WSlugIndexRoute,
   WSlugExposureRunIdRoute: WSlugExposureRunIdRoute,
+  WSlugExposureNewRoute: WSlugExposureNewRoute,
   WSlugReportsReportIdRoute: WSlugReportsReportIdRoute,
   WSlugExposureRunIdObsIdRoute: WSlugExposureRunIdObsIdRoute,
 }

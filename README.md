@@ -18,7 +18,7 @@ npm install
 npm run dev
 ```
 
-Sign in with any mocked identity, create the Acme Ltd workspace, run a check, open an observation, view the report, invite a viewer, and switch workspaces.
+Try the product loop: run a public snapshot for `acme.com`, save it, sign in, create the Acme Ltd workspace, activate External Exposure, choose checks, run again, then inspect change history, an observation, and the report.
 
 ## Note
 

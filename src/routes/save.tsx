@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
+import { ActivationPanel } from "@/components/activation-panel";
 import { LocationChip } from "@/components/location-chip";
 import { Logo } from "@/components/logo";
 import { WorkspaceMark } from "@/components/workspace-mark";
@@ -40,10 +41,12 @@ function SavePage() {
   const [name, setName] = useState("Acme Ltd");
   const [domain, setDomain] = useState(pendingSave?.domain ?? "acme.com");
   const [saved, setSaved] = useState<{
+    workspaceId: string;
     workspaceName: string;
     slug: string;
     runId: string;
     observedAt: string;
+    exposureActive: boolean;
   } | null>(null);
 
   if (!signedIn) {
@@ -59,6 +62,7 @@ function SavePage() {
     let workspaceId = selected;
     let workspaceName = owned.find((ws) => ws.id === selected)?.name;
     let slug = owned.find((ws) => ws.id === selected)?.slug;
+    let exposureActive = owned.find((ws) => ws.id === selected)?.exposureActive ?? false;
     if (selected === "new" || owned.length === 0) {
       const created = createWorkspace({
         name,
@@ -67,14 +71,17 @@ function SavePage() {
       workspaceId = created.id;
       workspaceName = created.name;
       slug = created.slug;
+      exposureActive = created.exposureActive;
     }
     const run = savePendingToWorkspace(workspaceId);
     if (run && workspaceName && slug) {
       setSaved({
+        workspaceId,
         workspaceName,
         slug,
         runId: run.id,
         observedAt: run.observedAt,
+        exposureActive,
       });
     }
   }
@@ -97,17 +104,38 @@ function SavePage() {
               {saved.workspaceName} now. The original observation time was
               preserved — saving did not produce new evidence.
             </p>
-            <Button
-              className="mt-8"
-              onClick={() =>
-                void navigate({
-                  to: "/w/$slug/exposure/$runId",
-                  params: { slug: saved.slug, runId: saved.runId },
-                })
-              }
-            >
-              Open workspace
-            </Button>
+            {saved.exposureActive ? (
+              <Button
+                className="mt-8"
+                onClick={() =>
+                  void navigate({
+                    to: "/w/$slug/exposure/$runId",
+                    params: { slug: saved.slug, runId: saved.runId },
+                  })
+                }
+              >
+                Open workspace
+              </Button>
+            ) : (
+              <div className="mt-8">
+                <ActivationPanel
+                  workspaceId={saved.workspaceId}
+                  onActivated={() =>
+                    void navigate({
+                      to: "/w/$slug/exposure/new",
+                      params: { slug: saved.slug },
+                      search: { edit: true },
+                    })
+                  }
+                  onContinue={() =>
+                    void navigate({
+                      to: "/w/$slug/exposure/$runId",
+                      params: { slug: saved.slug, runId: saved.runId },
+                    })
+                  }
+                />
+              </div>
+            )}
           </div>
         ) : pendingSave ? (
           <div>

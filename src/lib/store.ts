@@ -2,6 +2,12 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useMemo } from "react";
 import {
+  defaultCheckProfile,
+  publicCheckset,
+  subscribedCheckProfile,
+  workspaceCheckset,
+} from "./checks";
+import {
   ACME_WORKSPACE,
   FROZEN_OBSERVED_AT,
   KAROL,
@@ -15,6 +21,7 @@ import {
 import { observationsForDomain } from "./observations";
 import { slugify } from "./utils";
 import type {
+  CheckProfile,
   ExposureRun,
   Member,
   PendingSave,
@@ -50,11 +57,24 @@ interface AppState {
   }) => Member;
   changeRole: (memberId: string, role: Role) => void;
   removeMember: (memberId: string) => void;
-  startRun: (input: { domain: string; workspaceId: string }) => RunningCheck;
-  completeRun: (opts?: { seedHistory?: boolean; source?: ExposureRun["source"]; initiator?: string }) => ExposureRun | null;
+  startRun: (input: {
+    domain: string;
+    workspaceId: string;
+    checkIds: string[];
+    source?: ExposureRun["source"];
+  }) => RunningCheck;
+  completeRun: (opts?: {
+    source?: ExposureRun["source"];
+    initiator?: string;
+  }) => ExposureRun | null;
   setPendingSave: (pending: PendingSave | null) => void;
   savePendingToWorkspace: (workspaceId: string) => ExposureRun | null;
-  updateWorkspace: (id: string, patch: Partial<Pick<Workspace, "name" | "primaryDomain">>) => void;
+  updateWorkspace: (
+    id: string,
+    patch: Partial<Pick<Workspace, "name" | "primaryDomain">>,
+  ) => void;
+  activateExposure: (workspaceId: string) => void;
+  updateCheckProfile: (workspaceId: string, patch: Partial<CheckProfile>) => void;
 }
 
 const emptyState = {
@@ -106,13 +126,22 @@ export const useAppStore = create<AppState>()(
       createWorkspace: ({ name, domain }) => {
         const state = get();
         const slug = uniqueSlug(name, state.workspaces);
+        const alreadyActive = state.workspaces.some((ws) => ws.exposureActive);
         const workspace: Workspace = {
           id: `ws-${slug}`,
           slug,
           name: name.trim() || "Workspace",
-          primaryDomain: domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""),
+          primaryDomain: domain
+            .trim()
+            .toLowerCase()
+            .replace(/^https?:\/\//, "")
+            .replace(/\/.*$/, ""),
           createdAt: new Date().toISOString(),
           mark: MARK_PALETTE[state.workspaces.length % MARK_PALETTE.length] ?? "#c8b896",
+          exposureActive: alreadyActive,
+          checkProfile: alreadyActive
+            ? subscribedCheckProfile()
+            : defaultCheckProfile(),
         };
         const owner: Member = {
           id: `mem-${workspace.id}-${state.user?.id ?? "owner"}`,
@@ -168,12 +197,21 @@ export const useAppStore = create<AppState>()(
       removeMember: (memberId) => {
         set({ members: get().members.filter((member) => member.id !== memberId) });
       },
-      startRun: ({ domain, workspaceId }) => {
+      startRun: ({ domain, workspaceId, checkIds, source }) => {
+        const existing = get().runs.filter((run) => run.workspaceId === workspaceId);
         const observedAt =
           domain.toLowerCase() === "acme.com"
-            ? FROZEN_OBSERVED_AT
+            ? new Date(
+                Date.parse(FROZEN_OBSERVED_AT) + existing.length * 60 * 60 * 1000,
+              ).toISOString()
             : new Date().toISOString();
-        const running: RunningCheck = { domain, workspaceId, observedAt };
+        const running: RunningCheck = {
+          domain,
+          workspaceId,
+          observedAt,
+          checkIds,
+          source,
+        };
         set({ running });
         return running;
       },
@@ -184,38 +222,31 @@ export const useAppStore = create<AppState>()(
           set({ running: null });
           return null;
         }
+        const workspace = state.workspaces.find((ws) => ws.id === running.workspaceId);
         const workspaceRuns = state.runs.filter(
           (run) => run.workspaceId === running.workspaceId,
         );
-        const shouldSeed =
-          opts?.seedHistory !== false &&
-          running.domain.toLowerCase() === "acme.com" &&
-          workspaceRuns.length === 0;
-
-        if (shouldSeed) {
-          const seeded = acmeHistoryRuns(running.workspaceId).map((run) => ({
-            ...run,
-            source: (opts?.source ?? "workspace") as ExposureRun["source"],
-            initiator: opts?.initiator ?? state.user?.name ?? "Karol",
-          }));
-          set({
-            runs: [...state.runs, ...seeded],
-            running: null,
-          });
-          return seeded[0] ?? null;
-        }
-
+        const checkIds = running.checkIds;
+        const source = opts?.source ?? running.source ?? "workspace";
+        const meta =
+          source === "public" || !workspace?.exposureActive
+            ? publicCheckset()
+            : workspaceCheckset(checkIds);
         const run: ExposureRun = {
           id: nextRunId(workspaceRuns),
           workspaceId: running.workspaceId,
           domain: running.domain,
           observedAt: running.observedAt,
-          checkset: "External Exposure 1.0",
-          checksetVersion: "1.0",
+          ...meta,
+          checkIds,
           initiator: opts?.initiator ?? state.user?.name ?? "Karol",
           status: "completed",
-          source: opts?.source ?? "workspace",
-          observations: observationsForDomain(running.domain, running.observedAt),
+          source,
+          observations: observationsForDomain(
+            running.domain,
+            running.observedAt,
+            checkIds,
+          ),
         };
         set({ runs: [run, ...state.runs], running: null });
         return run;
@@ -230,38 +261,12 @@ export const useAppStore = create<AppState>()(
           (run) =>
             run.domain === pending.domain && run.observedAt === pending.observedAt,
         );
+        const slug =
+          state.workspaces.find((ws) => ws.id === workspaceId)?.slug ??
+          state.lastWorkspaceSlug;
         if (existing) {
-          set({
-            pendingSave: null,
-            lastWorkspaceSlug:
-              state.workspaces.find((ws) => ws.id === workspaceId)?.slug ??
-              state.lastWorkspaceSlug,
-          });
+          set({ pendingSave: null, lastWorkspaceSlug: slug });
           return existing;
-        }
-        const isAcmeEmpty =
-          pending.domain.toLowerCase() === "acme.com" && workspaceRuns.length === 0;
-        if (isAcmeEmpty) {
-          const seeded = acmeHistoryRuns(workspaceId).map((run, index) =>
-            index === 0
-              ? {
-                  ...run,
-                  source: "public" as const,
-                  initiator: `${state.user?.name ?? "Karol"} (saved from public check)`,
-                  savedAt: new Date().toISOString(),
-                  observedAt: pending.observedAt,
-                  observations: pending.observations,
-                }
-              : run,
-          );
-          set({
-            runs: [...seeded, ...state.runs],
-            pendingSave: null,
-            lastWorkspaceSlug:
-              state.workspaces.find((ws) => ws.id === workspaceId)?.slug ??
-              state.lastWorkspaceSlug,
-          });
-          return seeded[0] ?? null;
         }
         const run: ExposureRun = {
           id: nextRunId(workspaceRuns),
@@ -271,6 +276,7 @@ export const useAppStore = create<AppState>()(
           savedAt: new Date().toISOString(),
           checkset: pending.checkset,
           checksetVersion: pending.checksetVersion,
+          checkIds: pending.checkIds,
           initiator: `${state.user?.name ?? "Karol"} (saved from public check)`,
           status: "completed",
           source: "public",
@@ -279,9 +285,7 @@ export const useAppStore = create<AppState>()(
         set({
           runs: [run, ...state.runs],
           pendingSave: null,
-          lastWorkspaceSlug:
-            state.workspaces.find((ws) => ws.id === workspaceId)?.slug ??
-            state.lastWorkspaceSlug,
+          lastWorkspaceSlug: slug,
         });
         return run;
       },
@@ -292,9 +296,31 @@ export const useAppStore = create<AppState>()(
           ),
         });
       },
+      activateExposure: (workspaceId) => {
+        set({
+          workspaces: get().workspaces.map((ws) =>
+            ws.id === workspaceId
+              ? {
+                  ...ws,
+                  exposureActive: true,
+                  checkProfile: subscribedCheckProfile(),
+                }
+              : ws,
+          ),
+        });
+      },
+      updateCheckProfile: (workspaceId, patch) => {
+        set({
+          workspaces: get().workspaces.map((ws) =>
+            ws.id === workspaceId
+              ? { ...ws, checkProfile: { ...ws.checkProfile, ...patch } }
+              : ws,
+          ),
+        });
+      },
     }),
     {
-      name: "witnessops-prototype",
+      name: "witnessops-prototype-v2",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({

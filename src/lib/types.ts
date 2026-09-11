@@ -1,3 +1,5 @@
+import type { Cadence } from "./checks";
+
 export type Role = "owner" | "viewer";
 
 export type ObservationStatus =
@@ -21,6 +23,11 @@ export interface User {
   email: string;
 }
 
+export interface CheckProfile {
+  checkIds: string[];
+  cadence: Cadence;
+}
+
 export interface Workspace {
   id: string;
   slug: string;
@@ -28,6 +35,8 @@ export interface Workspace {
   primaryDomain: string;
   createdAt: string;
   mark: string;
+  exposureActive: boolean;
+  checkProfile: CheckProfile;
 }
 
 export interface Member {
@@ -67,6 +76,7 @@ export interface ExposureRun {
   savedAt?: string;
   checkset: string;
   checksetVersion: string;
+  checkIds: string[];
   initiator: string;
   status: "completed";
   observations: Observation[];
@@ -87,6 +97,7 @@ export interface PendingSave {
   observedAt: string;
   checkset: string;
   checksetVersion: string;
+  checkIds: string[];
   observations: Observation[];
 }
 
@@ -94,4 +105,6 @@ export interface RunningCheck {
   domain: string;
   workspaceId?: string;
   observedAt: string;
+  checkIds: string[];
+  source?: ExposureRun["source"];
 }

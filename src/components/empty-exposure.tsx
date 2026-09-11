@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { RunningCheck } from "@/components/running-check";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PUBLIC_CHECK_IDS } from "@/lib/checks";
 import { useAppStore } from "@/lib/store";
 import type { Workspace } from "@/lib/types";
 
@@ -24,6 +25,7 @@ export function EmptyExposure({
     return (
       <RunningCheck
         domain={running.domain}
+        checkIds={running.checkIds}
         onDone={() => {
           const run = completeRun();
           if (run) {
@@ -37,24 +39,66 @@ export function EmptyExposure({
     );
   }
 
+  if (workspace.exposureActive) {
+    return (
+      <div className="mx-auto max-w-lg py-6">
+        <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
+        <h1 className="mt-2 text-2xl font-medium tracking-tight">
+          No domains monitored yet.
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg-muted">
+          Observe what is publicly visible about a hostname and track how it
+          changes over time.
+        </p>
+        {canRun ? (
+          <div className="mt-8">
+            <Button asChild>
+              <Link
+                to="/w/$slug/exposure/new"
+                params={{ slug: workspace.slug }}
+                search={{ edit: true }}
+              >
+                Add domain
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <p className="mt-8 text-sm text-fg-muted">
+            Only an owner can add a domain in this workspace.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-lg py-6">
       <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
       <h1 className="mt-2 text-2xl font-medium tracking-tight">
-        See what ten public checks observe about your hostname.
+        See what is publicly observable about your external presence.
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-        The result is saved to {workspace.name}. This is an unauthenticated
-        observation of a public hostname, not a complete security assessment.
+        A first snapshot is saved to {workspace.name}. This is an
+        unauthenticated observation of a public hostname, not a complete
+        security assessment.
       </p>
       {canRun ? (
         <form
           className="mt-8 grid gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            const host = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+            const host = domain
+              .trim()
+              .toLowerCase()
+              .replace(/^https?:\/\//, "")
+              .replace(/\/.*$/, "");
             if (!host) return;
-            startRun({ domain: host, workspaceId: workspace.id });
+            startRun({
+              domain: host,
+              workspaceId: workspace.id,
+              checkIds: PUBLIC_CHECK_IDS,
+              source: "public",
+            });
           }}
         >
           <Label htmlFor="empty-domain">Hostname</Label>
@@ -67,7 +111,7 @@ export function EmptyExposure({
             spellCheck={false}
           />
           <div className="pt-2">
-            <Button type="submit">Run check</Button>
+            <Button type="submit">Run a first observation</Button>
           </div>
         </form>
       ) : (
