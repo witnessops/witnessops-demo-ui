@@ -1,11 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { ChangeDigestLines } from "@/components/change-digest";
+import { CompactHistory } from "@/components/change-digest";
 import { EmptyExposure } from "@/components/empty-exposure";
-import { SummaryCounts } from "@/components/status-pill";
-import { digestRunChange, previousRunFor } from "@/lib/diff";
-import { formatDate, summarize } from "@/lib/format";
-import { methodLabelFromRun, profileNameFromRun } from "@/lib/runbooks";
 import {
   isOwner,
   useMembership,
@@ -77,53 +73,12 @@ function ExposureHistoryPage() {
         </div>
       </div>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Completed runs are snapshots. Environment change is what changed on the
-        asset. Coverage change is what was checked.
+        Completed runs are snapshots. Skim what changed without opening every
+        run. Previous evidence stays intact.
       </p>
-      <ol className="mt-8 grid gap-3">
-        {visible.map((run, index) => {
-          const previous = previousRunFor(run, visible);
-          const summary = summarize(run.observations);
-          const digest = digestRunChange(run, previous);
-          return (
-            <li key={run.id}>
-              <Link
-                to="/w/$slug/exposure/$runId"
-                params={{ slug, runId: run.id }}
-                className="block rounded-xl border border-border bg-surface p-5 transition-colors hover:bg-surface-hover"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-xs text-fg-subtle">
-                      {index === 0 ? "Latest run" : `Previous · ${formatDate(run.observedAt)}`}
-                    </p>
-                    <h2 className="mt-1 text-lg font-medium tracking-tight">
-                      {formatDate(run.observedAt)}
-                    </h2>
-                    <p className="mt-1 text-xs text-fg-muted">
-                      {run.domain} · {profileNameFromRun(run)}
-                    </p>
-                    <p className="mt-1 font-mono text-[11px] text-fg-subtle">
-                      Method · {methodLabelFromRun(run)}
-                    </p>
-                  </div>
-                  <SummaryCounts summary={summary} compact />
-                </div>
-                {previous ? (
-                  <div className="mt-4">
-                    <ChangeDigestLines digest={digest} />
-                  </div>
-                ) : null}
-              </Link>
-            </li>
-          );
-        })}
-      </ol>
-      {visible.length === 0 ? (
-        <p className="mt-8 text-sm text-fg-muted">
-          No observations for this asset yet.
-        </p>
-      ) : null}
+      <div className="mt-8">
+        <CompactHistory slug={slug} runs={visible} showDomain={!asset} />
+      </div>
     </div>
   );
 }

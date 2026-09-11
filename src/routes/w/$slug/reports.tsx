@@ -1,7 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { attentionCopy, formatDate, reportIdForRun, summarize } from "@/lib/format";
-import { profileNameFromRun } from "@/lib/runbooks";
+import { digestRunChange, previousRunFor } from "@/lib/diff";
+import {
+  attentionCopy,
+  compactChange,
+  formatDate,
+  reportIdForRun,
+  summarize,
+} from "@/lib/format";
+import { methodLabelFromRun } from "@/lib/runbooks";
 import {
   isOwner,
   useMembership,
@@ -48,6 +55,8 @@ function ReportsPage() {
         <ul className="mt-8 divide-y divide-border rounded-xl border border-border">
           {runs.map((run) => {
             const summary = summarize(run.observations);
+            const previous = previousRunFor(run, runs);
+            const digest = digestRunChange(run, previous);
             return (
               <li key={run.id}>
                 <Link
@@ -60,7 +69,10 @@ function ReportsPage() {
                       {run.domain}
                     </span>
                     <span className="mt-1 block text-xs text-fg-muted">
-                      {formatDate(run.observedAt)} · {profileNameFromRun(run)}
+                      {formatDate(run.observedAt)} · {methodLabelFromRun(run)}
+                    </span>
+                    <span className="mt-1 block text-xs text-fg-subtle">
+                      {compactChange(digest, Boolean(previous))}
                     </span>
                   </span>
                   <span className="text-sm text-attention">

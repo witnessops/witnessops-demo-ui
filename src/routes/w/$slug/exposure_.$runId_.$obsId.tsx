@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
+import { observationChangeLabel } from "@/lib/asset-status";
+import { diffRuns, previousRunFor } from "@/lib/diff";
+import { contractStatusLabel, implementationLabel } from "@/lib/checks";
 import { formatDateTime } from "@/lib/format";
 import { useWorkspace, useWorkspaceRuns } from "@/lib/store";
 
@@ -19,7 +22,7 @@ function Section({
 }) {
   return (
     <section className="rounded-xl border border-border bg-surface p-5">
-      <p className="font-mono text-[11px] tracking-wide text-fg-subtle uppercase">
+      <p className="font-mono text-xs tracking-wide text-fg-subtle uppercase">
         {kicker}
       </p>
       <h2 className="mt-1 text-sm font-medium text-fg">{title}</h2>
@@ -34,29 +37,49 @@ function ObservationPage() {
   const runs = useWorkspaceRuns(workspace?.id);
   const run = runs.find((item) => item.id === runId);
   const observation = run?.observations.find((item) => item.id === obsId);
+  const previous = run ? previousRunFor(run, runs) : undefined;
+  const diffs = run ? diffRuns(run, previous) : [];
+  const change =
+    observation && previous
+      ? observationChangeLabel(observation.id, diffs)
+      : undefined;
 
   if (!workspace || !run || !observation) {
     return (
       <div className="mx-auto max-w-xl py-10">
         <h1 className="text-xl font-medium">Observation not found</h1>
-        <ButtonBack slug={slug} runId={runId} />
+        <ButtonBack slug={slug} runId={runId} assetId={run?.assetId} />
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        to="/w/$slug/exposure/$runId"
-        params={{ slug, runId }}
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-      >
-        <ArrowLeft className="size-3.5" />
-        Back to review
-      </Link>
+      {run.assetId ? (
+        <Link
+          to="/w/$slug/assets/$assetId"
+          params={{ slug, assetId: run.assetId }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to asset
+        </Link>
+      ) : (
+        <Link
+          to="/w/$slug/exposure/$runId"
+          params={{ slug, runId }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to review
+        </Link>
+      )}
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <p className="font-mono text-xs text-fg-subtle">{observation.category}</p>
         <StatusPill status={observation.status} label={observation.statusLabel} />
+        {change ? (
+          <span className="text-xs font-medium text-attention">{change}</span>
+        ) : null}
       </div>
       <h1 className="mt-2 text-3xl font-medium tracking-tight">
         {observation.name}
@@ -64,6 +87,13 @@ function ObservationPage() {
       <p className="mt-2 font-mono text-xs text-fg-subtle">
         {run.domain} · {observation.method}
       </p>
+      <Link
+        to="/w/$slug/exposure/$runId"
+        params={{ slug, runId }}
+        className="mt-2 inline-block text-xs text-fg-muted hover:text-fg"
+      >
+        Open this run
+      </Link>
 
       <div className="mt-8 grid gap-3">
         <Section kicker="Scope" title="What we checked">
@@ -93,18 +123,67 @@ function ObservationPage() {
         <Section kicker="Unknown" title="What remains unknown">
           {observation.remainsUnknown}
         </Section>
+        {observation.recommendation ? (
+          <Section kicker="Follow-up" title="Recorded follow-up">
+            {observation.recommendation}
+          </Section>
+        ) : null}
         <Section kicker="Method" title="How this was produced">
           <p>{observation.method}</p>
           <p className="mt-2 font-mono text-xs text-fg-subtle">
             Observed at {formatDateTime(observation.observedAt)}
           </p>
+          {observation.contractStatus ? (
+            <p className="mt-2 font-mono text-xs text-fg-subtle">
+              Recorded status · {contractStatusLabel(observation.contractStatus)} ·{" "}
+              {observation.contractStatus}
+              {observation.collected === false ? " · not collected" : null}
+            </p>
+          ) : null}
+          {observation.checkId ? (
+            <p className="mt-1 font-mono text-xs text-fg-subtle">
+              {observation.checkId}
+              {observation.checkVersion ? ` · ${observation.checkVersion}` : null}
+            </p>
+          ) : null}
+          {observation.implementation ? (
+            <p className="mt-2 text-xs text-fg-subtle">
+              {implementationLabel(observation.implementation)}
+            </p>
+          ) : null}
+          {observation.sourceEvidenceRefs && observation.sourceEvidenceRefs.length > 0 ? (
+            <ul className="mt-2 grid gap-1 font-mono text-xs text-fg-subtle">
+              {observation.sourceEvidenceRefs.map((ref) => (
+                <li key={ref}>{ref}</li>
+              ))}
+            </ul>
+          ) : null}
         </Section>
       </div>
     </div>
   );
 }
 
-function ButtonBack({ slug, runId }: { slug: string; runId: string }) {
+function ButtonBack({
+  slug,
+  runId,
+  assetId,
+}: {
+  slug: string;
+  runId: string;
+  assetId?: string;
+}) {
+  if (assetId) {
+    return (
+      <Link
+        to="/w/$slug/assets/$assetId"
+        params={{ slug, assetId }}
+        className="mt-6 inline-flex text-sm text-fg-muted hover:text-fg"
+      >
+        Back to asset
+      </Link>
+    );
+  }
   return (
     <Link
       to="/w/$slug/exposure/$runId"

@@ -3,6 +3,7 @@ import {
   CHECK_CATALOG,
   CHECK_GROUPS,
   OPTIONAL_CHECK_IDS,
+  implementationLabel,
   type CheckDef,
   type CheckGroup,
 } from "@/lib/checks";
@@ -93,6 +94,11 @@ export function CheckPicker({
                           <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
                             {check.blurb}
                           </span>
+                          {check.implementation !== "REAL_NOW" ? (
+                            <span className="mt-1 block text-xs text-fg-subtle">
+                              {implementationLabel(check.implementation)}
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                     </li>

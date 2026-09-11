@@ -1,30 +1,20 @@
 import { Link } from "@tanstack/react-router";
-import { digestRunChange, previousRunFor } from "@/lib/diff";
-import {
-  attentionCopy,
-  changeCopy,
-  formatShortDate,
-  summarize,
-} from "@/lib/format";
+import type { AssetSnapshot } from "@/lib/asset-status";
+import { deservesAttention } from "@/lib/asset-status";
 import { assetTypeLabel, profileName } from "@/lib/runbooks";
-import type { Asset, ExposureRun, Runbook } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export function AssetRow({
   slug,
-  asset,
-  runbook,
-  runs,
+  snapshot,
+  actionLabel,
 }: {
   slug: string;
-  asset: Asset;
-  runbook?: Runbook;
-  runs: ExposureRun[];
+  snapshot: AssetSnapshot;
+  actionLabel?: string;
 }) {
-  const latest = runs.find((run) => run.assetId === asset.id);
-  const previous = latest ? previousRunFor(latest, runs) : undefined;
-  const summary = latest ? summarize(latest.observations) : null;
-  const digest = latest ? digestRunChange(latest, previous) : null;
-  const envChanges = digest && previous ? digest.envChanged : 0;
+  const { asset, runbook, primary, secondary, stale } = snapshot;
+  const attention = deservesAttention(snapshot);
 
   return (
     <Link
@@ -36,25 +26,25 @@ export function AssetRow({
         <span className="block font-mono text-sm text-fg">{asset.name}</span>
         <span className="mt-1 block text-xs text-fg-muted">
           {assetTypeLabel(asset.type)}
-          {runbook ? ` · Checks: ${profileName(runbook)}` : null}
+          {runbook ? ` · ${profileName(runbook)}` : null}
         </span>
       </span>
       <span className="text-right text-sm">
-        {summary && latest ? (
-          <>
-            <span className="block text-attention">
-              {attentionCopy(summary.needsAttention)}
-            </span>
-            <span className="mt-1 block text-xs text-fg-muted">
-              Last observed {formatShortDate(latest.observedAt)}
-              {previous && envChanges > 0
-                ? ` · ${changeCopy(envChanges)}`
-                : null}
-            </span>
-          </>
-        ) : (
-          <span className="text-xs text-fg-subtle">Not observed yet</span>
-        )}
+        <span
+          className={cn(
+            "block",
+            attention ? "text-attention" : "text-fg",
+          )}
+        >
+          {primary}
+        </span>
+        <span className="mt-1 block text-xs text-fg-muted">
+          {secondary}
+          {stale && !secondary.includes("stale") ? " · May be stale" : null}
+        </span>
+        {actionLabel ? (
+          <span className="mt-2 block text-xs text-fg-subtle">{actionLabel}</span>
+        ) : null}
       </span>
     </Link>
   );

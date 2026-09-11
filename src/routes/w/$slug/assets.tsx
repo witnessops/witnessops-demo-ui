@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AssetRow } from "@/components/asset-row";
 import { Button } from "@/components/ui/button";
+import { snapshotsFor, sortSnapshots } from "@/lib/asset-status";
 import {
   isOwner,
   useMembership,
@@ -24,6 +25,8 @@ function AssetsPage() {
   const owner = isOwner(membership?.role);
 
   if (!workspace) return null;
+
+  const snapshots = sortSnapshots(snapshotsFor(assets, runs, runbooks));
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -62,14 +65,9 @@ function AssetsPage() {
         </div>
       ) : (
         <ul className="mt-8 divide-y divide-border rounded-xl border border-border">
-          {assets.map((asset) => (
-            <li key={asset.id}>
-              <AssetRow
-                slug={slug}
-                asset={asset}
-                runbook={runbooks.find((item) => item.id === asset.runbookId)}
-                runs={runs}
-              />
+          {snapshots.map((snapshot) => (
+            <li key={snapshot.asset.id}>
+              <AssetRow slug={slug} snapshot={snapshot} />
             </li>
           ))}
         </ul>

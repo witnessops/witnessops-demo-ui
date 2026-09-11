@@ -2,7 +2,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { StatusPill, SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, runIdForReport, summarize } from "@/lib/format";
+import { observationChangeLabel } from "@/lib/asset-status";
+import { digestRunChange, diffRuns, previousRunFor } from "@/lib/diff";
+import {
+  attentionCopy,
+  compactChange,
+  coverageCopy,
+  formatDateTime,
+  runIdForReport,
+  summarize,
+} from "@/lib/format";
 import { methodLabelFromRun, profileNameFromRun } from "@/lib/runbooks";
 import { useWorkspace, useWorkspaceRuns } from "@/lib/store";
 
@@ -30,6 +39,9 @@ function ReportPage() {
   }
 
   const summary = summarize(run.observations);
+  const previous = previousRunFor(run, runs);
+  const digest = digestRunChange(run, previous);
+  const diffs = diffRuns(run, previous);
   const attention = run.observations.filter((obs) => obs.status === "needs_attention");
   const informational = run.observations.filter((obs) => obs.status === "informational");
   const method = methodLabelFromRun(run);
@@ -75,7 +87,29 @@ function ReportPage() {
           {summary.completed}/{summary.total}
         </p>
 
-        <div className="mt-8 border-t border-paper-fg/10 pt-6">
+        <div className="mt-8 grid gap-4 border-t border-paper-fg/10 pt-6 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-paper-muted">Current</p>
+            <p className="mt-1 text-sm">{attentionCopy(summary.needsAttention)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-paper-muted">Change</p>
+            <p className="mt-1 text-sm">{compactChange(digest, Boolean(previous))}</p>
+          </div>
+          {previous && digest.checksAdded > 0 ? (
+            <div>
+              <p className="text-xs text-paper-muted">Coverage</p>
+              <p className="mt-1 text-sm">{coverageCopy(digest)}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-paper-muted">Method</p>
+              <p className="mt-1 text-sm">{method}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6">
           <div className="text-paper-fg">
             <SummaryCounts summary={summary} onPaper />
           </div>
@@ -91,18 +125,26 @@ function ReportPage() {
           <section className="mt-8">
             <h2 className="text-sm font-medium">Needs attention</h2>
             <ul className="mt-3 grid gap-3">
-              {attention.map((obs) => (
-                <li
-                  key={obs.id}
-                  className="rounded-lg border border-paper-fg/10 bg-paper p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">{obs.name}</p>
-                    <StatusPill status={obs.status} onPaper label={obs.statusLabel} />
-                  </div>
-                  <p className="mt-2 text-sm text-paper-muted">{obs.summary}</p>
-                </li>
-              ))}
+              {attention.map((obs) => {
+                const change = previous
+                  ? observationChangeLabel(obs.id, diffs)
+                  : undefined;
+                return (
+                  <li
+                    key={obs.id}
+                    className="rounded-lg border border-paper-fg/10 bg-paper p-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium">{obs.name}</p>
+                      <StatusPill status={obs.status} onPaper label={obs.statusLabel} />
+                      {change ? (
+                        <span className="text-xs text-attention-ink">{change}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm text-paper-muted">{obs.summary}</p>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}
@@ -138,20 +180,26 @@ function ReportPage() {
               </tr>
             </thead>
             <tbody>
-              {run.observations.map((obs) => (
-                <tr key={obs.id} className="border-b border-paper-fg/10 align-top">
-                  <td className="py-3 pr-3">
-                    <span className="block font-medium">{obs.name}</span>
-                    <span className="block text-xs text-paper-muted">
-                      {obs.category}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-3">
-                    <StatusPill status={obs.status} onPaper label={obs.statusLabel} />
-                  </td>
-                  <td className="py-3 text-paper-muted">{obs.summary}</td>
-                </tr>
-              ))}
+              {run.observations.map((obs) => {
+                const change = previous
+                  ? observationChangeLabel(obs.id, diffs)
+                  : undefined;
+                return (
+                  <tr key={obs.id} className="border-b border-paper-fg/10 align-top">
+                    <td className="py-3 pr-3">
+                      <span className="block font-medium">{obs.name}</span>
+                      <span className="block text-xs text-paper-muted">
+                        {obs.category}
+                        {change ? ` · ${change}` : null}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <StatusPill status={obs.status} onPaper label={obs.statusLabel} />
+                    </td>
+                    <td className="py-3 text-paper-muted">{obs.summary}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>
@@ -160,7 +208,10 @@ function ReportPage() {
           <h2 className="text-sm font-medium">Limits</h2>
           <ul className="mt-3 list-disc space-y-1.5 pl-4 text-sm text-paper-muted">
             <li>Scope is this asset only, using {method}.</li>
-            <li>Not a penetration test, certification, or security guarantee.</li>
+            <li>
+              Not a penetration test, complete attack-surface assessment,
+              certification, or assurance opinion.
+            </li>
             <li>
               Observed at {formatDateTime(run.observedAt)}. Conditions may have
               changed since.

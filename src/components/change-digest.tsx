@@ -1,4 +1,12 @@
-import type { ChangeDigest } from "@/lib/diff";
+import { Link } from "@tanstack/react-router";
+import { digestRunChange, previousRunFor, type ChangeDigest } from "@/lib/diff";
+import {
+  attentionCopy,
+  compactChange,
+  formatShortDate,
+  summarize,
+} from "@/lib/format";
+import type { ExposureRun } from "@/lib/types";
 
 function envLines(digest: ChangeDigest) {
   const lines: string[] = [];
@@ -35,14 +43,20 @@ function envLines(digest: ChangeDigest) {
 
 function coverageLines(digest: ChangeDigest) {
   const lines: string[] = [];
-  if (digest.checksAdded > 0) {
+  for (const check of digest.addedChecks) {
+    lines.push(`${check.name} added to this profile.`);
+  }
+  for (const check of digest.retiredChecks) {
+    lines.push(`${check.name} no longer in this profile.`);
+  }
+  if (lines.length === 0 && digest.checksAdded > 0) {
     lines.push(
       digest.checksAdded === 1
         ? "1 new check added"
         : `${digest.checksAdded} new checks added`,
     );
   }
-  if (digest.checksRetired > 0) {
+  if (lines.length === 0 && digest.checksRetired > 0) {
     lines.push(
       digest.checksRetired === 1
         ? "1 check retired"
@@ -52,7 +66,13 @@ function coverageLines(digest: ChangeDigest) {
   return lines;
 }
 
-export function ChangeDigestLines({ digest }: { digest: ChangeDigest }) {
+export function ChangeDigestLines({
+  digest,
+  title = "What changed",
+}: {
+  digest: ChangeDigest;
+  title?: string | false;
+}) {
   const env = envLines(digest);
   const coverage = coverageLines(digest);
   const coverageChanged = coverage.length > 0;
@@ -67,7 +87,9 @@ export function ChangeDigestLines({ digest }: { digest: ChangeDigest }) {
 
   return (
     <div className="grid gap-3">
-      <p className="text-xs font-medium text-fg">What changed</p>
+      {title ? (
+        <p className="text-xs font-medium text-fg">{title}</p>
+      ) : null}
       {env.length > 0 ? (
         <div>
           <p className="text-xs text-fg-subtle">Environment</p>
@@ -87,9 +109,56 @@ export function ChangeDigestLines({ digest }: { digest: ChangeDigest }) {
             ))}
           </ul>
         </div>
-      ) : (
-        <p className="text-xs text-fg-subtle">Coverage unchanged</p>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+export function CompactHistory({
+  slug,
+  runs,
+  showDomain = false,
+}: {
+  slug: string;
+  runs: ExposureRun[];
+  showDomain?: boolean;
+}) {
+  if (runs.length === 0) {
+    return (
+      <p className="text-sm text-fg-muted">No observations for this asset yet.</p>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-border rounded-xl border border-border">
+      {runs.map((run, index) => {
+        const previous = previousRunFor(run, runs);
+        const digest = digestRunChange(run, previous);
+        const summary = summarize(run.observations);
+        return (
+          <li key={run.id}>
+            <Link
+              to="/w/$slug/exposure/$runId"
+              params={{ slug, runId: run.id }}
+              className="flex flex-wrap items-start justify-between gap-3 px-4 py-3.5 hover:bg-surface"
+            >
+              <span>
+                <span className="block font-mono text-sm text-fg">
+                  {formatShortDate(run.observedAt)}
+                  {index === 0 ? " · Latest" : null}
+                </span>
+                <span className="mt-1 block text-xs text-fg-muted">
+                  {showDomain ? `${run.domain} · ` : null}
+                  {compactChange(digest, Boolean(previous))}
+                </span>
+              </span>
+              <span className="text-sm text-attention">
+                {attentionCopy(summary.needsAttention)}
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

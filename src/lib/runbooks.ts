@@ -1,8 +1,10 @@
+import { PUBLIC_CHECK_IDS } from "./checks";
 import { DEFAULT_PUBLIC_SERVICE_PORTS } from "./ports";
 import type {
   AssetType,
   Runbook,
   RunbookKind,
+  RunbookProvenance,
   RunbookTemplateId,
 } from "./types";
 
@@ -17,6 +19,7 @@ export interface RunbookTemplate {
   optionalCheckIds: string[];
   defaultPorts: number[];
   cadence: Runbook["cadence"];
+  provenance: RunbookProvenance;
 }
 
 export const RUNBOOK_TEMPLATES: RunbookTemplate[] = [
@@ -25,35 +28,46 @@ export const RUNBOOK_TEMPLATES: RunbookTemplate[] = [
     name: "Web Exposure",
     version: "1.2",
     description:
-      "Public DNS, TLS, HTTP and related signals for a domain or hostname.",
+      "The ten public External Exposure observations for a domain or hostname.",
     kind: "public_observation",
     supportedAssetTypes: ["domain", "hostname"],
-    checkIds: [
-      "dns",
-      "tls",
-      "http",
-      "headers",
-      "tech",
-      "securitytxt",
-      "certificate",
-      "exposure",
+    checkIds: [...PUBLIC_CHECK_IDS],
+    optionalCheckIds: [
+      "web.technology_signals.v1",
+      "dns.ct_names.v1",
+      "web.common_interfaces.v1",
     ],
-    optionalCheckIds: ["domain"],
     defaultPorts: [],
     cadence: "weekly",
+    provenance: {
+      source: "witnessops-web",
+      sourceContract: "ExternalSnapshotV1",
+      approvalRequirement: "none",
+    },
   },
   {
     templateId: "mail",
     name: "Mail Exposure",
     version: "1.0",
     description:
-      "Public mail DNS records and bounded observations of the mail host.",
+      "Public mail DNS observations, composing the existing SPF and DMARC snapshot checks first.",
     kind: "public_observation",
     supportedAssetTypes: ["domain", "hostname"],
-    checkIds: ["mx", "spf", "dkim", "dmarc", "tls", "mailhost"],
-    optionalCheckIds: ["dkim"],
+    checkIds: [
+      "mail.spf.v1",
+      "mail.dmarc.v1",
+      "mail.mx.v1",
+      "tls.certificate.v1",
+    ],
+    optionalCheckIds: ["mail.dkim.v1", "mail.host.v1"],
     defaultPorts: [],
     cadence: "weekly",
+    provenance: {
+      source: "witnessops-web",
+      sourceContract: "ExternalSnapshotV1",
+      sourceRunbook: "email-posture-discovery",
+      approvalRequirement: "none",
+    },
   },
   {
     templateId: "public-services",
@@ -63,34 +77,51 @@ export const RUNBOOK_TEMPLATES: RunbookTemplate[] = [
       "Bounded TCP reachability and public service observations for an address you are authorized to assess.",
     kind: "authorized_active",
     supportedAssetTypes: ["public_ip", "hostname", "server"],
-    checkIds: ["tls", "headers", "banner"],
-    optionalCheckIds: ["banner"],
+    checkIds: [
+      "tls.certificate.v1",
+      "web.security_headers.v1",
+      "net.public_banner.v1",
+    ],
+    optionalCheckIds: ["net.public_banner.v1"],
     defaultPorts: [...DEFAULT_PUBLIC_SERVICE_PORTS],
     cadence: "manual",
+    provenance: {
+      source: "mock",
+      approvalRequirement: "explicit",
+    },
   },
   {
     templateId: "certificate",
     name: "Certificate Watch",
     version: "1.0",
     description:
-      "Presented certificate, issuer, expiry, SANs and public CT visibility.",
+      "The TLS certificate and legacy-protocol observations already supported by the public snapshot.",
     kind: "public_observation",
     supportedAssetTypes: ["domain", "hostname"],
-    checkIds: ["tls", "certificate"],
-    optionalCheckIds: [],
+    checkIds: ["tls.certificate.v1", "tls.legacy_protocols.v1"],
+    optionalCheckIds: ["dns.ct_names.v1"],
     defaultPorts: [],
     cadence: "weekly",
+    provenance: {
+      source: "witnessops-web",
+      sourceContract: "ExternalSnapshotV1",
+      sourceRunbook: "tls-review",
+      approvalRequirement: "none",
+    },
   },
 ];
 
+/** Older Web Exposure profile used to demonstrate coverage change. */
 export const WEB_EXPOSURE_V11_CHECK_IDS = [
-  "dns",
-  "tls",
-  "http",
-  "headers",
-  "certificate",
-  "exposure",
-  "securitytxt",
+  "dns.public_target.v1",
+  "tls.certificate.v1",
+  "tls.legacy_protocols.v1",
+  "web.https_redirect.v1",
+  "web.hsts.v1",
+  "web.security_headers.v1",
+  "mail.spf.v1",
+  "mail.dmarc.v1",
+  "dns.caa.v1",
 ];
 
 export function templateById(id: RunbookTemplateId) {
@@ -125,6 +156,7 @@ export function instantiateRunbooks(
     kind: template.kind,
     supportedAssetTypes: [...template.supportedAssetTypes],
     updatedAt,
+    provenance: { ...template.provenance },
   }));
 }
 

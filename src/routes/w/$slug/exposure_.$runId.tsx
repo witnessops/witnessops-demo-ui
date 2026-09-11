@@ -6,8 +6,12 @@ import { ObservationList } from "@/components/observation-list";
 import { RunningCheck } from "@/components/running-check";
 import { SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { digestRunChange, previousRunFor } from "@/lib/diff";
-import { formatDateTime, reportIdForRun, summarize } from "@/lib/format";
+import {
+  sortObservationsForReturn,
+  usesProfileCopy,
+} from "@/lib/asset-status";
+import { digestRunChange, diffRuns, previousRunFor } from "@/lib/diff";
+import { formatDateTime, observedAgo, reportIdForRun, summarize } from "@/lib/format";
 import { methodLabelFromRun, profileNameFromRun } from "@/lib/runbooks";
 import {
   isOwner,
@@ -79,6 +83,8 @@ function ExposureRunPage() {
   const summary = summarize(run.observations);
   const previous = previousRunFor(run, runs);
   const digest = digestRunChange(run, previous);
+  const diffs = diffRuns(run, previous);
+  const observations = sortObservationsForReturn(run.observations, diffs);
 
   function runAgain() {
     if (!asset || !runbook || !workspace) return;
@@ -119,16 +125,18 @@ function ExposureRunPage() {
         Observation
       </h1>
       <p className="mt-3 text-sm text-fg-muted">
-        Observed {formatDateTime(run.observedAt)} · {profileNameFromRun(run)}
+        {observedAgo(run.observedAt)} · {formatDateTime(run.observedAt)} ·{" "}
+        {profileNameFromRun(run)}
         {run.savedAt
           ? ` · Saved to ${workspace.name} ${formatDateTime(run.savedAt)}`
           : null}
       </p>
       <p className="mt-2 text-sm text-fg-muted">
-        What these public checks observed about this asset. This is not a
-        complete security assessment.
+        What these public checks observed about this asset at the recorded
+        time. This is not a complete security assessment and does not
+        establish the absence of vulnerabilities.
       </p>
-      <p className="mt-1 font-mono text-[11px] text-fg-subtle">
+      <p className="mt-1 font-mono text-xs text-fg-subtle">
         Method · {methodLabelFromRun(run)}
       </p>
 
@@ -154,9 +162,14 @@ function ExposureRunPage() {
             <ChangeDigestLines digest={digest} />
           </div>
         ) : null}
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap items-start gap-2">
           {owner && workspace.exposureActive && asset && runbook ? (
-            <Button onClick={runAgain}>Run again</Button>
+            <div>
+              <Button onClick={runAgain}>Run again</Button>
+              <p className="mt-2 text-xs text-fg-subtle">
+                {usesProfileCopy(runbook)}
+              </p>
+            </div>
           ) : null}
           <Button variant="secondary" asChild>
             <Link
@@ -178,7 +191,8 @@ function ExposureRunPage() {
         <ObservationList
           slug={slug}
           runId={run.id}
-          observations={run.observations}
+          observations={observations}
+          diffs={previous ? diffs : undefined}
         />
       </div>
     </div>

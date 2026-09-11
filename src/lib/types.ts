@@ -1,4 +1,5 @@
-import type { Cadence } from "./checks";
+import type { Cadence, ImplementationClass } from "./checks";
+import type { CheckStatus } from "./contracts";
 
 export type Role = "owner" | "viewer";
 
@@ -19,9 +20,16 @@ export type MemberStatus = "active" | "invited";
 
 export type AssetType = "domain" | "hostname" | "public_ip" | "server";
 
+/** Product execution class. Maps from OFFSEC passive/active, not a 1:1 copy. */
 export type RunbookKind = "public_observation" | "authorized_active";
 
+export type ApprovalRequirement = "none" | "explicit";
+
+export type ProvenanceSource = "witnessops-web" | "witnessops-offsec" | "mock";
+
 export type RunbookTemplateId = "web" | "mail" | "public-services" | "certificate";
+
+export type CompletionState = "complete" | "partial";
 
 export interface User {
   id: string;
@@ -54,6 +62,13 @@ export interface Asset {
   createdAt: string;
 }
 
+export interface RunbookProvenance {
+  source: ProvenanceSource;
+  sourceContract?: string;
+  sourceRunbook?: string;
+  approvalRequirement: ApprovalRequirement;
+}
+
 export interface Runbook {
   id: string;
   workspaceId: string;
@@ -67,6 +82,7 @@ export interface Runbook {
   kind: RunbookKind;
   supportedAssetTypes: AssetType[];
   updatedAt: string;
+  provenance?: RunbookProvenance;
 }
 
 export interface Member {
@@ -83,6 +99,13 @@ export interface EvidenceItem {
   value: string;
 }
 
+/**
+ * UI projection of one check result.
+ *
+ * Source fields (checkId, contractStatus, collected, interpretation,
+ * limitations, recommendation, sourceEvidenceRefs) are shaped after
+ * ExternalCheckResultV1 so a real snapshot can be persisted later.
+ */
 export interface Observation {
   id: string;
   category: string;
@@ -97,6 +120,17 @@ export interface Observation {
   remainsUnknown: string;
   method: string;
   observedAt: string;
+  checkId?: string;
+  checkVersion?: string;
+  contractStatus?: CheckStatus;
+  collected?: boolean;
+  interpretation?: string;
+  limitations?: string[];
+  recommendation?: string | null;
+  sourceEvidenceRefs?: string[];
+  implementation?: ImplementationClass;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface ExposureRun {
@@ -118,6 +152,9 @@ export interface ExposureRun {
   runbookVersion?: string;
   ports?: number[];
   kind?: RunbookKind;
+  snapshotVersion?: string;
+  completionState?: CompletionState;
+  sourceDigest?: string;
 }
 
 export interface Summary {

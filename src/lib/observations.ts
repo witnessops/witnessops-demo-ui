@@ -1,4 +1,5 @@
-import { CHECK_CATALOG, PUBLIC_CHECK_IDS } from "./checks";
+import { CHECK_CATALOG, PUBLIC_CHECK_IDS, checkById, contractStatusFromUi } from "./checks";
+import { MOCK_CHECK_VERSION } from "./contracts";
 import { portCheckId, portDef } from "./ports";
 import { formatDateTime } from "./format";
 import type { Observation, ObservationStatus } from "./types";
@@ -21,6 +22,7 @@ interface Spec {
       observed: string;
       evidence: { label: string; value: string }[];
       present?: boolean;
+      recommendation?: string | null;
     }
   >;
 }
@@ -29,36 +31,76 @@ function interpolate(template: string, domain: string) {
   return template.replaceAll("{domain}", domain);
 }
 
+function sourceRefs(id: string) {
+  const check = checkById(id);
+  if (check?.implementation === "REAL_NOW") {
+    return [
+      `external-exposure-snapshot.json: checks[check_id=${id}]`,
+      "The source appendix records the bounded observation and connection/query ledger.",
+    ];
+  }
+  return ["prototype-mock-observation"];
+}
+
+function attachSource(
+  observation: Observation,
+  extras?: { recommendation?: string | null },
+): Observation {
+  const check = checkById(observation.id);
+  const collected = observation.collected ?? true;
+  const contractStatus =
+    observation.contractStatus ??
+    contractStatusFromUi(observation.status, collected);
+  return {
+    ...observation,
+    checkId: observation.checkId ?? observation.id,
+    checkVersion: observation.checkVersion ?? check?.checkVersion ?? MOCK_CHECK_VERSION,
+    contractStatus,
+    collected,
+    interpretation: observation.interpretation ?? observation.observed,
+    limitations: observation.limitations ?? [observation.remainsUnknown],
+    recommendation:
+      extras?.recommendation !== undefined
+        ? extras.recommendation
+        : (observation.recommendation ?? null),
+    sourceEvidenceRefs: observation.sourceEvidenceRefs ?? sourceRefs(observation.id),
+    implementation: check?.implementation ?? observation.implementation,
+    startedAt: observation.startedAt ?? observation.observedAt,
+    finishedAt: observation.finishedAt ?? observation.observedAt,
+  };
+}
+
 const SPECS: Spec[] = [
   {
-    id: "dns",
+    id: "dns.public_target.v1",
     category: "Domain & DNS",
-    name: "DNS configuration",
-    method: "Unauthenticated DNS query",
+    name: "Public DNS target",
+    method:
+      "Controlled A and AAAA resolution; reject every non-global candidate before application traffic.",
     checked:
-      "Whether public resolvers receive authoritative answers for {domain} on common record types used to locate the service.",
+      "Whether public resolvers return connection-eligible addresses for {domain}.",
     whyItMatters:
-      "DNS is the public mapping from hostname to service. Unexpected records can send traffic somewhere other than the intended system.",
+      "Public resolution is an eligibility observation. It is the mapping from hostname to a public address, not a security conclusion.",
     remainsUnknown:
       "This check does not establish that every subdomain is intended, or that answers are consistent on resolvers that were not queried.",
     variants: {
       latest: {
         status: "clear",
-        summary: "Authoritative nameservers answered for {domain}.",
+        summary: "Only public connection-eligible addresses were returned.",
         observed:
-          "Authoritative nameservers answered for {domain}. An A record was present. No unexpected wildcard catch-all was observed by this checkset.",
+          "Public resolvers returned connection-eligible addresses for {domain}. An A record was present. No outbound application connection is implied by this observation alone.",
         evidence: [
           { label: "Queried name", value: "{domain}" },
-          { label: "NS set", value: "ns1.{domain}, ns2.{domain}" },
           { label: "A record", value: "203.0.113.40" },
+          { label: "AAAA", value: "None" },
           { label: "TTL", value: "300" },
         ],
       },
       mid: {
         status: "clear",
-        summary: "Authoritative nameservers answered for {domain}.",
+        summary: "Only public connection-eligible addresses were returned.",
         observed:
-          "Authoritative nameservers answered for {domain}. An A record was present.",
+          "Public resolvers returned a public A record for {domain}.",
         evidence: [
           { label: "Queried name", value: "{domain}" },
           { label: "A record", value: "203.0.113.40" },
@@ -66,9 +108,9 @@ const SPECS: Spec[] = [
       },
       early: {
         status: "clear",
-        summary: "Authoritative nameservers answered for {domain}.",
+        summary: "Only public connection-eligible addresses were returned.",
         observed:
-          "Authoritative nameservers answered for {domain}. An A record was present.",
+          "Public resolvers returned a public A record for {domain}.",
         evidence: [
           { label: "Queried name", value: "{domain}" },
           { label: "A record", value: "203.0.113.40" },
@@ -77,22 +119,23 @@ const SPECS: Spec[] = [
     },
   },
   {
-    id: "tls",
+    id: "tls.certificate.v1",
     category: "Web presence",
-    name: "TLS & certificates",
-    method: "TLS handshake observation",
+    name: "TLS certificate state",
+    method:
+      "One TLS handshake to a validated address on 443, with logical hostname SNI and certificate hostname validation.",
     checked:
-      "Whether the hostname presents a valid publicly trusted TLS certificate during an unauthenticated handshake.",
+      "Whether the hostname presents a trusted certificate that matches {domain} and remains valid for more than 30 days.",
     whyItMatters:
-      "A trusted certificate is what browsers and clients use to decide whether the public service is the one named in the hostname. It is not a statement about application security.",
+      "A trusted matching certificate is what clients use to decide whether the public service is the one named in the hostname. It is not a statement about application security.",
     remainsUnknown:
-      "This observation does not establish the security of the application behind the hostname, nor whether private keys are well controlled.",
+      "One TLS handshake and the local trust store were used; revocation, all endpoints and all cipher suites were not assessed.",
     variants: {
       latest: {
         status: "clear",
-        summary: "A valid certificate was presented for {domain}.",
+        summary: "The observed certificate was trusted, matched the hostname and remains valid for more than 30 days.",
         observed:
-          "A valid publicly trusted certificate was presented for {domain} during the TLS handshake. The name on the certificate matched the observed hostname.",
+          "A trusted publicly issued certificate was presented for {domain}. The name matched the hostname and the certificate remains valid for more than 30 days.",
         evidence: [
           { label: "Observed hostname", value: "{domain}" },
           { label: "Certificate subject", value: "CN={domain}" },
@@ -103,9 +146,9 @@ const SPECS: Spec[] = [
       },
       mid: {
         status: "clear",
-        summary: "A valid certificate was presented for {domain}.",
+        summary: "The observed certificate was trusted and matched the hostname.",
         observed:
-          "A valid publicly trusted certificate was presented for {domain}.",
+          "A trusted certificate was presented for {domain} and remains valid for more than 30 days.",
         evidence: [
           { label: "Observed hostname", value: "{domain}" },
           { label: "Issuer", value: "Let's Encrypt" },
@@ -114,9 +157,9 @@ const SPECS: Spec[] = [
       },
       early: {
         status: "clear",
-        summary: "A valid certificate was presented for {domain}.",
+        summary: "The observed certificate was trusted and matched the hostname.",
         observed:
-          "A valid publicly trusted certificate was presented for {domain}.",
+          "A trusted certificate was presented for {domain}.",
         evidence: [
           { label: "Observed hostname", value: "{domain}" },
           { label: "Issuer", value: "Let's Encrypt" },
@@ -125,126 +168,235 @@ const SPECS: Spec[] = [
     },
   },
   {
-    id: "headers",
+    id: "tls.legacy_protocols.v1",
     category: "Web presence",
-    name: "HTTP security headers",
-    method: "Unauthenticated HTTPS GET of the apex response",
+    name: "Legacy TLS protocols",
+    method:
+      "At most one TLS 1.0 and one TLS 1.1 attempt, without cipher enumeration.",
     checked:
-      "Which commonly used HTTP security headers are present on the apex HTTPS response for {domain}.",
+      "Whether {domain} still negotiates TLS 1.0 or TLS 1.1 from this observation point.",
     whyItMatters:
-      "Headers such as Strict-Transport-Security are a public signal of how the site asks browsers to treat future connections. Their absence is observable without logging in.",
+      "Legacy TLS protocols are a public transport observation. Negotiation is not a complete cipher audit.",
     remainsUnknown:
-      "Missing headers are not proof of a compromise, and present headers are not proof that the application is protected. Only the apex response was observed.",
+      "Only TLS 1.0 and TLS 1.1 were probed; a local protocol or cipher restriction is not evidence that the peer rejects a protocol.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "The peer explicitly rejected both tested legacy TLS protocols.",
+        observed:
+          "TLS 1.0 and TLS 1.1 attempts to {domain} were rejected by the peer. No legacy protocol was negotiated.",
+        evidence: [
+          { label: "TLSv1", value: "peer_rejected" },
+          { label: "TLSv1.1", value: "peer_rejected" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "The peer explicitly rejected both tested legacy TLS protocols.",
+        observed: "TLS 1.0 and TLS 1.1 were rejected by the peer.",
+        evidence: [
+          { label: "TLSv1", value: "peer_rejected" },
+          { label: "TLSv1.1", value: "peer_rejected" },
+        ],
+      },
+      early: {
+        status: "undetermined",
+        summary: "The probes did not establish explicit peer rejection of both legacy protocols.",
+        observed:
+          "A TLS 1.0 attempt ended without an explicit peer rejection. No security conclusion follows.",
+        evidence: [
+          { label: "TLSv1", value: "undetermined" },
+          { label: "TLSv1.1", value: "peer_rejected" },
+        ],
+      },
+    },
+  },
+  {
+    id: "web.https_redirect.v1",
+    category: "Web presence",
+    name: "HTTP to HTTPS transition",
+    method:
+      "GET the HTTP root and follow at most three HTTP/HTTPS redirects, validating each new connection.",
+    checked:
+      "Whether the HTTP root request for {domain} transitions to a usable HTTPS response.",
+    whyItMatters:
+      "The root HTTP to HTTPS transition is a public signal of how the hostname asks clients to continue. It is not a claim about every route.",
+    remainsUnknown:
+      "Only the root request and this bounded redirect chain were tested. This does not establish redirect behavior for every route.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "The HTTP root request transitioned to a usable HTTPS response.",
+        observed:
+          "GET http://{domain}/ returned 301 to https://{domain}/, which returned 200.",
+        evidence: [
+          { label: "HTTP request", value: "GET http://{domain}/" },
+          { label: "HTTP status", value: "301" },
+          { label: "HTTPS request", value: "GET https://{domain}/" },
+          { label: "HTTPS status", value: "200" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "The HTTP root request transitioned to a usable HTTPS response.",
+        observed: "The HTTP root redirected to a usable HTTPS response.",
+        evidence: [
+          { label: "HTTP status", value: "301" },
+          { label: "HTTPS status", value: "200" },
+        ],
+      },
+      early: {
+        status: "clear",
+        summary: "The HTTP root request transitioned to a usable HTTPS response.",
+        observed: "The HTTP root redirected to HTTPS.",
+        evidence: [{ label: "HTTPS status", value: "200" }],
+      },
+    },
+  },
+  {
+    id: "web.hsts.v1",
+    category: "Web presence",
+    name: "HTTP Strict Transport Security",
+    method:
+      "Parse Strict-Transport-Security from the shared final usable HTTPS response.",
+    checked:
+      "Whether the HTTPS response for {domain} includes HSTS with a positive max-age.",
+    whyItMatters:
+      "HSTS is a public instruction to browsers about future connections. Its absence is observable without logging in.",
+    remainsUnknown:
+      "This checks the observed HTTPS response only; preload membership and subdomain coverage were not tested.",
     variants: {
       latest: {
         status: "needs_attention",
-        summary: "HSTS and Content-Security-Policy were not present on the apex response.",
+        summary: "The response did not include HSTS.",
         observed:
-          "The apex HTTPS response for {domain} did not include Strict-Transport-Security. Content-Security-Policy was also absent. X-Content-Type-Options: nosniff was present.",
+          "The apex HTTPS response for {domain} did not include Strict-Transport-Security.",
         evidence: [
           { label: "Request", value: "GET https://{domain}/" },
           { label: "Status", value: "200" },
           { label: "Strict-Transport-Security", value: "Not present" },
-          { label: "Content-Security-Policy", value: "Not present" },
-          { label: "X-Content-Type-Options", value: "nosniff" },
         ],
+        recommendation:
+          "Consider a suitable Strict-Transport-Security policy after validating HTTPS coverage.",
       },
       mid: {
         status: "needs_attention",
-        summary: "HSTS was not present on the apex response.",
-        observed:
-          "The apex HTTPS response for {domain} did not include Strict-Transport-Security or Content-Security-Policy.",
-        evidence: [
-          { label: "Request", value: "GET https://{domain}/" },
-          { label: "Strict-Transport-Security", value: "Not present" },
-          { label: "Content-Security-Policy", value: "Not present" },
-        ],
-      },
-      early: {
-        status: "needs_attention",
-        summary: "HSTS was not present on the apex response.",
+        summary: "The response did not include HSTS.",
         observed:
           "The apex HTTPS response for {domain} did not include Strict-Transport-Security.",
         evidence: [
           { label: "Request", value: "GET https://{domain}/" },
           { label: "Strict-Transport-Security", value: "Not present" },
         ],
-      },
-    },
-  },
-  {
-    id: "spf",
-    category: "Email",
-    name: "SPF",
-    method: "DNS TXT lookup for SPF",
-    checked: "Whether {domain} publishes an SPF record, and what it declares.",
-    whyItMatters:
-      "A published SPF record is a public instruction to receiving mail servers about which hosts may send mail for the domain.",
-    remainsUnknown:
-      "Publication is not proof that mail is well handled operationally, or that every sending path is covered.",
-    variants: {
-      latest: {
-        status: "clear",
-        summary: "SPF is published for {domain}.",
-        observed:
-          "A SPF TXT record was published for {domain}. The record used a soft-fail all mechanism.",
-        evidence: [
-          { label: "Name", value: "{domain}" },
-          { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
-        ],
-      },
-      mid: {
-        status: "clear",
-        summary: "SPF is published for {domain}.",
-        observed: "A SPF TXT record was published for {domain}.",
-        evidence: [
-          { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
-        ],
+        recommendation:
+          "Consider a suitable Strict-Transport-Security policy after validating HTTPS coverage.",
       },
       early: {
-        status: "clear",
-        summary: "SPF is published for {domain}.",
-        observed: "A SPF TXT record was published for {domain}.",
+        status: "needs_attention",
+        summary: "The response did not include HSTS.",
+        observed:
+          "The apex HTTPS response for {domain} did not include Strict-Transport-Security.",
         evidence: [
-          { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
+          { label: "Request", value: "GET https://{domain}/" },
+          { label: "Strict-Transport-Security", value: "Not present" },
+        ],
+        recommendation:
+          "Consider a suitable Strict-Transport-Security policy after validating HTTPS coverage.",
+      },
+    },
+  },
+  {
+    id: "web.security_headers.v1",
+    category: "Web presence",
+    name: "Browser security headers",
+    method:
+      "Inspect nosniff, framing protection, CSP and Referrer-Policy on the shared HTTPS response.",
+    checked:
+      "Which nosniff, framing, CSP and Referrer-Policy headers appear on the HTTPS response for {domain}.",
+    whyItMatters:
+      "These headers are a public signal of how the site asks browsers to treat the response. Presence is not policy effectiveness.",
+    remainsUnknown:
+      "This checks header presence and bounded syntax, not policy effectiveness. CSP completeness and application security were not assessed.",
+    variants: {
+      latest: {
+        status: "needs_attention",
+        summary: "The response lacks recognized nosniff or frame-policy headers.",
+        observed:
+          "The apex HTTPS response for {domain} included X-Content-Type-Options: nosniff. No recognized X-Frame-Options or CSP frame-ancestors declaration was present. Content-Security-Policy and Referrer-Policy were also absent.",
+        evidence: [
+          { label: "Request", value: "GET https://{domain}/" },
+          { label: "Status", value: "200" },
+          { label: "X-Content-Type-Options", value: "nosniff" },
+          { label: "X-Frame-Options", value: "Not present" },
+          { label: "Content-Security-Policy", value: "Not present" },
+          { label: "Referrer-Policy", value: "Not present" },
+        ],
+        recommendation:
+          "Review X-Content-Type-Options and an appropriate frame-ancestors or X-Frame-Options policy.",
+      },
+      mid: {
+        status: "needs_attention",
+        summary: "The response lacks a recognized frame-policy header.",
+        observed:
+          "Nosniff was present. No recognized framing policy, CSP or Referrer-Policy was observed.",
+        evidence: [
+          { label: "X-Content-Type-Options", value: "nosniff" },
+          { label: "X-Frame-Options", value: "Not present" },
+          { label: "Content-Security-Policy", value: "Not present" },
+        ],
+        recommendation:
+          "Review X-Content-Type-Options and an appropriate frame-ancestors or X-Frame-Options policy.",
+      },
+      early: {
+        status: "needs_attention",
+        summary: "The response lacks recognized nosniff or frame-policy headers.",
+        observed: "No recognized framing policy was present on the apex HTTPS response.",
+        evidence: [
+          { label: "X-Frame-Options", value: "Not present" },
+          { label: "Content-Security-Policy", value: "Not present" },
         ],
       },
     },
   },
   {
-    id: "dkim",
-    category: "Email",
-    name: "DKIM",
-    method: "DNS TXT lookup for common DKIM selectors",
+    id: "web.security_txt.v1",
+    category: "Web presence",
+    name: "Vulnerability reporting contact",
+    method:
+      "At most two HTTPS GETs: /.well-known/security.txt, then /security.txt if needed; 64 KiB each.",
     checked:
-      "Whether common DKIM selector names for {domain} return a public key record.",
+      "Whether {domain} publishes a security.txt file at the well-known path, and whether a contact is present.",
     whyItMatters:
-      "Visible DKIM selectors are a public signal that the domain can sign mail. Their absence from common names is not proof that no selector exists.",
+      "A published security.txt is how the organisation asks the public to report issues. Its presence is a coordination signal, not a security control.",
     remainsUnknown:
-      "Only a short list of common selector names was queried. A missing common selector does not establish that mail is unsigned.",
+      "The file is a published contact declaration; contact ownership, delivery, signatures and vulnerability handling were not authenticated.",
     variants: {
       latest: {
-        status: "informational",
-        summary: "No common DKIM selector was confirmed for {domain}.",
+        status: "clear",
+        summary: "The well-known file contained parseable Contact and current Expires fields.",
         observed:
-          "TXT lookups for selector names default._domainkey, s1._domainkey and google._domainkey on {domain} did not return a public key. Other selectors were not queried.",
+          "https://{domain}/.well-known/security.txt returned a file with a contact mailbox and a future Expires date.",
         evidence: [
-          { label: "Selectors queried", value: "default, s1, google" },
-          { label: "Result", value: "No DKIM TXT observed" },
+          { label: "Path", value: "/.well-known/security.txt" },
+          { label: "Status", value: "200" },
+          { label: "Contact", value: "mailto:security@{domain}" },
+          { label: "Expires", value: "2027-01-01T00:00:00.000Z" },
         ],
       },
       mid: {
         status: "informational",
-        summary: "No common DKIM selector was confirmed for {domain}.",
+        summary: "No security.txt file was observed at this location.",
         observed:
-          "Common DKIM selector names did not return a public key record.",
+          "GET https://{domain}/.well-known/security.txt returned 404. No security.txt was observed at /security.txt either.",
         evidence: [
-          { label: "Selectors queried", value: "default, s1, google" },
+          { label: "Path", value: "/.well-known/security.txt" },
+          { label: "Status", value: "404" },
         ],
+        recommendation: "Consider publishing security.txt at /.well-known/security.txt.",
       },
       early: {
         present: false,
-        status: "informational",
+        status: "undetermined",
         summary: "",
         observed: "",
         evidence: [],
@@ -252,90 +404,241 @@ const SPECS: Spec[] = [
     },
   },
   {
-    id: "dmarc",
+    id: "mail.spf.v1",
     category: "Email",
-    name: "DMARC",
-    method: "DNS TXT lookup for DMARC",
+    name: "SPF publication",
+    method:
+      "TXT and MX at the submitted hostname. Bounded publication syntax only; no mechanism recursion.",
+    checked: "Whether {domain} publishes an SPF record, and what it declares.",
+    whyItMatters:
+      "A published SPF record is a public instruction to receiving mail servers about which hosts may send mail for the domain.",
+    remainsUnknown:
+      "Only published SPF syntax was checked. Includes, redirects, macros, DNS lookup limits and actual sender authorization were not evaluated.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "One SPF record was parseable and no unconditional pass mechanism was observed.",
+        observed:
+          "A single SPF TXT record was published for {domain}. The record used a soft-fail all mechanism.",
+        evidence: [
+          { label: "Name", value: "{domain}" },
+          { label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" },
+          { label: "MX present", value: "Yes" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "One SPF record was parseable.",
+        observed: "A SPF TXT record was published for {domain}.",
+        evidence: [{ label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" }],
+      },
+      early: {
+        status: "clear",
+        summary: "One SPF record was parseable.",
+        observed: "A SPF TXT record was published for {domain}.",
+        evidence: [{ label: "SPF", value: "v=spf1 include:_spf.{domain} ~all" }],
+      },
+    },
+  },
+  {
+    id: "mail.dmarc.v1",
+    category: "Email",
+    name: "DMARC publication",
+    method:
+      "TXT at _dmarc.hostname and the shared MX observation. No contact with reporting destinations.",
     checked:
       "Whether {domain} publishes a DMARC record, and what policy that record declares.",
     whyItMatters:
       "A DMARC policy is a public instruction to receivers about unauthenticated mail that claims to come from the domain. A policy of p=none monitors and does not instruct receivers to reject.",
     remainsUnknown:
-      "Publication is not proof that reports are read, or that mailbox providers honour the policy.",
+      "Only this hostname’s published DMARC syntax was checked; organizational-domain fallback, report authorization, delivery and alignment were not evaluated.",
     variants: {
       latest: {
-        status: "needs_attention",
-        summary: "DMARC is present with p=none.",
+        status: "informational",
+        summary: "DMARC requests monitoring without quarantine or rejection.",
         observed:
           "A DMARC record was present at _dmarc.{domain} with policy p=none. Receivers are asked to monitor, not to reject unauthenticated mail.",
         evidence: [
           { label: "Name", value: "_dmarc.{domain}" },
           { label: "DMARC", value: "v=DMARC1; p=none; rua=mailto:dmarc@{domain}" },
+          { label: "MX present", value: "Yes" },
         ],
+        recommendation: "Review reports before choosing an enforcement policy.",
       },
       mid: {
-        status: "needs_attention",
-        summary: "DMARC is present with p=none.",
+        status: "informational",
+        summary: "DMARC requests monitoring without quarantine or rejection.",
         observed: "DMARC policy was p=none.",
         evidence: [{ label: "DMARC", value: "v=DMARC1; p=none" }],
+        recommendation: "Review reports before choosing an enforcement policy.",
       },
       early: {
         status: "needs_attention",
-        summary: "No DMARC record was observed.",
-        observed: "No DMARC TXT record was observed at _dmarc.{domain}.",
-        evidence: [{ label: "DMARC", value: "Not present" }],
+        summary: "No DMARC record was observed at the queried name.",
+        observed: "No DMARC TXT record was observed at _dmarc.{domain}. MX was present.",
+        evidence: [
+          { label: "DMARC", value: "Not present" },
+          { label: "MX present", value: "Yes" },
+        ],
+        recommendation: "Confirm the mail policy and whether a parent-domain policy applies.",
       },
     },
   },
   {
-    id: "services",
-    category: "Public exposure",
-    name: "Publicly observable services",
-    method: "Low-impact TCP connect to a short allowlisted port set",
+    id: "dns.caa.v1",
+    category: "Domain & DNS",
+    name: "CAA publication",
+    method:
+      "Recursive resolver CAA lookup and parent inheritance, at most five names, bounded by the PSL registrable domain.",
     checked:
-      "Whether a small allowlisted set of commonly exposed ports on the public address of {domain} accepted a connection.",
+      "Whether CAA issuance restrictions are published for {domain} within the registrable-domain boundary.",
     whyItMatters:
-      "Unexpected public services expand what an unauthenticated party can talk to. This is a bounded observation, not a full port scan.",
+      "CAA is a public instruction to certificate authorities. Absence of CAA does not establish that unauthorized certificates exist.",
     remainsUnknown:
-      "Ports outside the allowlisted set were not checked. A closed port in this checkset is not a claim that the host has no other listeners.",
+      "This interprets the supplied CAA records only; CA-specific parameters, issuance history and DNSSEC were not evaluated. Inheritance stops at the PSL registrable domain.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "CAA issuance restrictions were observed.",
+        observed:
+          "A CAA record was published permitting letsencrypt.org. Inheritance stopped at the registrable domain {domain}.",
+        evidence: [
+          { label: "Effective name", value: "{domain}" },
+          { label: "CAA", value: '0 issue "letsencrypt.org"' },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "CAA issuance restrictions were observed.",
+        observed: "CAA permitted letsencrypt.org.",
+        evidence: [{ label: "CAA", value: '0 issue "letsencrypt.org"' }],
+      },
+      early: {
+        status: "informational",
+        summary: "No effective CAA restriction was observed within the stated registrable-domain boundary.",
+        observed: "No CAA records were returned for {domain} or its registrable-domain parents.",
+        evidence: [
+          { label: "Queried names", value: "{domain}" },
+          { label: "Records", value: "None" },
+        ],
+      },
+    },
+  },
+  {
+    id: "mail.dkim.v1",
+    category: "Email",
+    name: "DKIM selectors",
+    method: "DNS TXT lookup of a short list of common DKIM selectors",
+    checked:
+      "Whether a short list of common DKIM selector names is visible in public DNS for {domain}.",
+    whyItMatters:
+      "A published DKIM selector is a public signal that the domain has configured mail signing. Missing common selectors are not proof that mail is unsigned.",
+    remainsUnknown:
+      "Only a short list of common selector names was queried. A missing common selector does not establish that mail is unsigned.",
     variants: {
       latest: {
         status: "informational",
-        summary: "HTTPS on 443 responded. No additional allowlisted ports responded.",
+        summary: "A common DKIM selector answered in public DNS.",
         observed:
-          "443/tcp accepted HTTPS. 80/tcp redirected to HTTPS. No additional commonly observed ports in this checkset (22, 25, 8080, 8443) accepted a connection from the observation point.",
+          "selector1._domainkey.{domain} returned a TXT record. Other common selectors in this short list did not.",
         evidence: [
-          { label: "Address", value: "203.0.113.40" },
-          { label: "80/tcp", value: "Redirected to HTTPS" },
-          { label: "443/tcp", value: "HTTPS responded" },
-          { label: "22, 25, 8080, 8443", value: "No response observed" },
+          { label: "selector1._domainkey.{domain}", value: "TXT present" },
+          { label: "google._domainkey.{domain}", value: "NXDOMAIN" },
         ],
       },
       mid: {
         status: "informational",
-        summary: "HTTPS on 443 responded. No additional allowlisted ports responded.",
-        observed:
-          "443/tcp accepted HTTPS. Other allowlisted ports did not accept a connection.",
+        summary: "A common DKIM selector answered in public DNS.",
+        observed: "selector1._domainkey.{domain} returned a TXT record.",
+        evidence: [{ label: "selector1._domainkey.{domain}", value: "TXT present" }],
+      },
+      early: {
+        status: "informational",
+        summary: "No common DKIM selector in this short list answered.",
+        observed: "The short list of common DKIM selectors did not return TXT records.",
+        evidence: [{ label: "Common selectors", value: "No TXT observed" }],
+      },
+    },
+  },
+  {
+    id: "mail.mx.v1",
+    category: "Email",
+    name: "MX",
+    method: "DNS MX lookup at the submitted hostname",
+    checked: "Whether public MX records point {domain} at a mail host.",
+    whyItMatters:
+      "MX is the public mapping from domain to mail host. It is collected by the existing SPF and DMARC snapshot methods as supporting data.",
+    remainsUnknown:
+      "An MX record does not establish that mail is accepted, or that the host is the intended provider.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "MX records point {domain} at a mail host.",
+        observed: "MX for {domain} pointed at mail.{domain} with priority 10.",
         evidence: [
-          { label: "443/tcp", value: "HTTPS responded" },
-          { label: "22, 25, 8080, 8443", value: "No response observed" },
+          { label: "MX", value: "10 mail.{domain}" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "MX records point {domain} at a mail host.",
+        observed: "MX for {domain} pointed at mail.{domain}.",
+        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
+      },
+      early: {
+        status: "clear",
+        summary: "MX records point {domain} at a mail host.",
+        observed: "MX for {domain} pointed at mail.{domain}.",
+        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
+      },
+    },
+  },
+  {
+    id: "mail.host.v1",
+    category: "Email",
+    name: "Mail host exposure",
+    method: "Bounded connection to the published mail host. Not a mail-server test.",
+    checked:
+      "Whether the published mail host for {domain} presents a public mail service on a common port.",
+    whyItMatters:
+      "A public mail service on the published host is an observable fact. It is not a finding of weak authentication.",
+    remainsUnknown:
+      "This does not establish mail server configuration, authentication quality, or whether the host accepts mail for the domain.",
+    variants: {
+      latest: {
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed:
+          "mail.{domain} accepted a TCP connection on port 25 and returned a short SMTP banner.",
+        evidence: [
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
+          { label: "Protocol", value: "TCP" },
+          { label: "Banner", value: "220 mail.{domain} ESMTP" },
+        ],
+      },
+      mid: {
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed: "mail.{domain} accepted a TCP connection on port 25.",
+        evidence: [
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
         ],
       },
       early: {
-        status: "needs_attention",
-        summary: "HTTPS on 443 and a service on 8080 responded.",
-        observed:
-          "443/tcp accepted HTTPS. 8080/tcp also accepted a connection and returned an HTTP response. 22, 25 and 8443 did not respond.",
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed: "mail.{domain} accepted a TCP connection on port 25.",
         evidence: [
-          { label: "443/tcp", value: "HTTPS responded" },
-          { label: "8080/tcp", value: "HTTP 200 from a default page" },
-          { label: "22, 25, 8443", value: "No response observed" },
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
         ],
       },
     },
   },
   {
-    id: "tech",
+    id: "web.technology_signals.v1",
     category: "Web presence",
     name: "Public technology signals",
     method: "Inspection of public HTTP response headers and HTML references",
@@ -376,57 +679,14 @@ const SPECS: Spec[] = [
     },
   },
   {
-    id: "securitytxt",
-    category: "Web presence",
-    name: "security.txt",
-    method: "HTTPS GET of /.well-known/security.txt",
-    checked:
-      "Whether {domain} publishes a security.txt file at the well-known path, and whether a contact is present.",
-    whyItMatters:
-      "A published security.txt is how the organisation asks the public to report issues. Its presence is a coordination signal, not a security control.",
-    remainsUnknown:
-      "A reachable file does not establish that the contact is monitored, or that reports are handled.",
-    variants: {
-      latest: {
-        status: "clear",
-        summary: "security.txt was retrieved with a contact address.",
-        observed:
-          "https://{domain}/.well-known/security.txt returned a file with a contact mailbox and a future Expires date.",
-        evidence: [
-          { label: "Path", value: "/.well-known/security.txt" },
-          { label: "Status", value: "200" },
-          { label: "Contact", value: "mailto:security@{domain}" },
-          { label: "Expires", value: "2027-01-01T00:00:00.000Z" },
-        ],
-      },
-      mid: {
-        status: "needs_attention",
-        summary: "No security.txt was retrieved at the well-known path.",
-        observed:
-          "GET https://{domain}/.well-known/security.txt returned 404. No security.txt was observed at /security.txt either.",
-        evidence: [
-          { label: "Path", value: "/.well-known/security.txt" },
-          { label: "Status", value: "404" },
-        ],
-      },
-      early: {
-        present: false,
-        status: "undetermined",
-        summary: "",
-        observed: "",
-        evidence: [],
-      },
-    },
-  },
-  {
-    id: "certificate",
+    id: "dns.ct_names.v1",
     category: "Domain & DNS",
-    name: "Certificate transparency",
-    method: "Inspection of the presented certificate and public CT log query",
+    name: "Certificate transparency names",
+    method: "Inspection of the presented certificate and a public CT log query",
     checked:
-      "Which names appear on the presented certificate for {domain}, whether it is currently within its validity window, and whether a matching certificate is visible in public CT logs.",
+      "Which names appear on the presented certificate for {domain}, and whether a matching certificate is visible in public CT logs.",
     whyItMatters:
-      "The certificate is a public statement of names the operator asked a CA to bind. Extra names, a short remaining window, or unexpected issuers are reviewable facts.",
+      "The certificate is a public statement of names the operator asked a CA to bind. Extra names are reviewable facts.",
     remainsUnknown:
       "CT visibility does not prove that every issued certificate is still in use, and this check does not establish private-key hygiene.",
     variants: {
@@ -434,79 +694,29 @@ const SPECS: Spec[] = [
         status: "clear",
         summary: "Certificate covers {domain} and www.{domain}, within its validity window.",
         observed:
-          "The presented certificate includes {domain} and www.{domain}. It is within its validity window. A matching leaf was visible in public CT logs.",
+          "The presented certificate includes {domain} and www.{domain}. A matching leaf was visible in public CT logs.",
         evidence: [
           { label: "SAN", value: "{domain}, www.{domain}" },
-          { label: "Not before", value: "8 Aug 2026" },
-          { label: "Not after", value: "6 Nov 2026" },
           { label: "CT log", value: "Matching leaf observed" },
         ],
       },
       mid: {
         status: "clear",
-        summary: "Certificate covers {domain} and www.{domain}, within its validity window.",
-        observed:
-          "The presented certificate includes {domain} and www.{domain} and is within its validity window.",
-        evidence: [
-          { label: "SAN", value: "{domain}, www.{domain}" },
-          { label: "Not after", value: "6 Nov 2026" },
-        ],
+        summary: "Certificate covers {domain} and www.{domain}.",
+        observed: "The presented certificate includes {domain} and www.{domain}.",
+        evidence: [{ label: "SAN", value: "{domain}, www.{domain}" }],
       },
       early: {
         status: "clear",
-        summary: "Certificate covers {domain}, within its validity window.",
-        observed:
-          "The presented certificate includes {domain} and is within its validity window.",
-        evidence: [
-          { label: "SAN", value: "{domain}" },
-          { label: "Not after", value: "6 Nov 2026" },
-        ],
+        summary: "Certificate covers {domain}.",
+        observed: "The presented certificate includes {domain}.",
+        evidence: [{ label: "SAN", value: "{domain}" }],
       },
     },
   },
   {
-    id: "domain",
-    category: "Domain & DNS",
-    name: "Domain observations",
-    method: "DNS lookup for CAA and NS at the apex",
-    checked:
-      "Whether {domain} publishes CAA, and whether the apex NS set looks like an ordinary delegation rather than an unexpected cut.",
-    whyItMatters:
-      "CAA is a public instruction to certificate authorities. Unexpected nameserver changes are a common way control of a hostname is lost.",
-    remainsUnknown:
-      "A published CAA record does not prevent every mis-issuance, and this check does not watch registrar lock or account recovery.",
-    variants: {
-      latest: {
-        status: "clear",
-        summary: "CAA is published. Apex NS set matches the expected pair.",
-        observed:
-          "A CAA record was published permitting letsencrypt.org. The apex NS set matched ns1.{domain} and ns2.{domain}. No unexpected additional NS was observed.",
-        evidence: [
-          { label: "CAA", value: '0 issue "letsencrypt.org"' },
-          { label: "NS", value: "ns1.{domain}, ns2.{domain}" },
-        ],
-      },
-      mid: {
-        status: "clear",
-        summary: "CAA is published. Apex NS set matches the expected pair.",
-        observed: "CAA permitted letsencrypt.org. Apex NS matched the expected pair.",
-        evidence: [
-          { label: "CAA", value: '0 issue "letsencrypt.org"' },
-          { label: "NS", value: "ns1.{domain}, ns2.{domain}" },
-        ],
-      },
-      early: {
-        present: false,
-        status: "undetermined",
-        summary: "",
-        observed: "",
-        evidence: [],
-      },
-    },
-  },
-  {
-    id: "exposure",
-    category: "Public exposure",
+    id: "web.common_interfaces.v1",
+    category: "Web presence",
     name: "Common exposed interfaces",
     method: "Unauthenticated GET of a short list of commonly guessed paths",
     checked:
@@ -518,9 +728,9 @@ const SPECS: Spec[] = [
     variants: {
       latest: {
         status: "clear",
-        summary: "No commonly guessed admin path returned an application login in this checkset.",
+        summary: "No commonly guessed admin path returned an application login in this set.",
         observed:
-          "GET requests to /admin, /login and /wp-admin on {domain} did not return a 200 with an authentication form. /login returned 404. This is not a complete content discovery exercise.",
+          "GET requests to /admin, /login and /wp-admin on {domain} did not return a 200 with an authentication form. This is not a complete content discovery exercise.",
         evidence: [
           { label: "/admin", value: "404" },
           { label: "/login", value: "404" },
@@ -529,153 +739,24 @@ const SPECS: Spec[] = [
       },
       mid: {
         status: "clear",
-        summary: "No commonly guessed admin path returned an application login in this checkset.",
-        observed:
-          "GET requests to /admin, /login and /wp-admin did not return an authentication form.",
+        summary: "No commonly guessed admin path returned an application login in this set.",
+        observed: "Guessed admin paths returned 404.",
         evidence: [
           { label: "/admin", value: "404" },
           { label: "/login", value: "404" },
-          { label: "/wp-admin", value: "404" },
-        ],
-      },
-      early: {
-        status: "needs_attention",
-        summary: "/login returned a 200 with a sign-in form.",
-        observed:
-          "GET https://{domain}/login returned 200 and an HTML sign-in form. /admin and /wp-admin returned 404. Reachability of a login form is not proof that it is unsafe, but it is publicly observable.",
-        evidence: [
-          { label: "/login", value: "200 · HTML sign-in form" },
-          { label: "/admin", value: "404" },
-          { label: "/wp-admin", value: "404" },
-        ],
-      },
-    },
-  },
-  {
-    id: "http",
-    category: "Web presence",
-    name: "HTTP response",
-    method: "Unauthenticated HTTPS GET of the public response",
-    checked:
-      "Whether {domain} returns a public HTTP or HTTPS response without authentication.",
-    whyItMatters:
-      "A public response is the baseline that later header, TLS and content observations refer to. It is not a statement about application security.",
-    remainsUnknown:
-      "A successful response does not establish that every path behaves the same way, or that the origin is the intended system behind a CDN.",
-    variants: {
-      latest: {
-        status: "clear",
-        summary: "HTTPS on {domain} returned a public 200 response.",
-        observed:
-          "GET https://{domain}/ returned HTTP 200. HTTP on port 80 redirected to HTTPS.",
-        evidence: [
-          { label: "Request", value: "GET https://{domain}/" },
-          { label: "Status", value: "200" },
-          { label: "HTTP", value: "Redirected to HTTPS" },
-        ],
-      },
-      mid: {
-        status: "clear",
-        summary: "HTTPS on {domain} returned a public 200 response.",
-        observed: "GET https://{domain}/ returned HTTP 200.",
-        evidence: [
-          { label: "Request", value: "GET https://{domain}/" },
-          { label: "Status", value: "200" },
         ],
       },
       early: {
         status: "clear",
-        summary: "HTTPS on {domain} returned a public 200 response.",
-        observed: "GET https://{domain}/ returned HTTP 200.",
-        evidence: [
-          { label: "Request", value: "GET https://{domain}/" },
-          { label: "Status", value: "200" },
-        ],
+        summary: "No commonly guessed admin path returned an application login in this set.",
+        observed: "Guessed admin paths returned 404.",
+        evidence: [{ label: "/admin", value: "404" }],
       },
     },
   },
   {
-    id: "mx",
-    category: "Email",
-    name: "MX",
-    method: "Unauthenticated DNS query for MX",
-    checked: "Whether public DNS publishes MX records for {domain}.",
-    whyItMatters:
-      "MX records are the public instruction for where mail for the domain should be delivered.",
-    remainsUnknown:
-      "Published MX records do not establish that the mail host accepts mail for every address, or that it is the intended operator.",
-    variants: {
-      latest: {
-        status: "clear",
-        summary: "MX for {domain} points at mail.{domain}.",
-        observed:
-          "An MX record was published for {domain} with preference 10, pointing at mail.{domain}.",
-        evidence: [
-          { label: "Name", value: "{domain}" },
-          { label: "MX", value: "10 mail.{domain}" },
-        ],
-      },
-      mid: {
-        status: "clear",
-        summary: "MX for {domain} points at mail.{domain}.",
-        observed: "An MX record was published for {domain}.",
-        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
-      },
-      early: {
-        status: "clear",
-        summary: "MX for {domain} points at mail.{domain}.",
-        observed: "An MX record was published for {domain}.",
-        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
-      },
-    },
-  },
-  {
-    id: "mailhost",
-    category: "Email",
-    name: "Mail host exposure",
-    method: "Bounded TCP connection attempt to the published mail host",
-    checked:
-      "Whether the published mail host for {domain} responded on a common mail port from the observation point.",
-    whyItMatters:
-      "A reachable mail service is an expected public surface for a mail hostname. Reachability is not a finding of weakness.",
-    remainsUnknown:
-      "This does not establish mail server configuration, authentication quality, or whether the host accepts mail for the domain.",
-    variants: {
-      latest: {
-        status: "informational",
-        summary: "The published mail host responded on 25/tcp.",
-        observed:
-          "mail.{domain} accepted a TCP connection on port 25 and returned a short SMTP banner. This is a public reachability observation, not a test of mail security.",
-        evidence: [
-          { label: "Target", value: "mail.{domain}" },
-          { label: "Port", value: "25" },
-          { label: "Protocol", value: "TCP" },
-          { label: "Banner", value: "220 mail.{domain} ESMTP" },
-        ],
-      },
-      mid: {
-        status: "informational",
-        summary: "The published mail host responded on 25/tcp.",
-        observed: "mail.{domain} accepted a TCP connection on port 25.",
-        evidence: [
-          { label: "Target", value: "mail.{domain}" },
-          { label: "Port", value: "25" },
-        ],
-      },
-      early: {
-        status: "informational",
-        summary: "The published mail host responded on 25/tcp.",
-        observed: "mail.{domain} accepted a TCP connection on port 25.",
-        evidence: [
-          { label: "Target", value: "mail.{domain}" },
-          { label: "Port", value: "25" },
-        ],
-      },
-    },
-  },
-  {
-    id: "banner",
-    category: "Public exposure",
+    id: "net.public_banner.v1",
+    category: "Public services",
     name: "Public banners",
     method: "Read of a short identifying banner from an observed service",
     checked:
@@ -723,124 +804,153 @@ export function buildObservations(
     if (allowed && !allowed.has(spec.id)) continue;
     const v = spec.variants[variant];
     if (v.present === false) continue;
-    observations.push({
-      id: spec.id,
-      category: spec.category,
-      name: spec.name,
-      status: v.status,
-      summary: interpolate(v.summary, domain),
-      checked: interpolate(spec.checked, domain),
-      observed: interpolate(v.observed, domain),
-      evidence: v.evidence.map((item) => ({
-        label: interpolate(item.label, domain),
-        value: interpolate(item.value, domain),
-      })),
-      whyItMatters: interpolate(spec.whyItMatters, domain),
-      remainsUnknown: interpolate(spec.remainsUnknown, domain),
-      method: spec.method,
-      observedAt,
-    });
+    observations.push(
+      attachSource(
+        {
+          id: spec.id,
+          category: spec.category,
+          name: spec.name,
+          status: v.status,
+          summary: interpolate(v.summary, domain),
+          checked: interpolate(spec.checked, domain),
+          observed: interpolate(v.observed, domain),
+          evidence: v.evidence.map((item) => ({
+            label: interpolate(item.label, domain),
+            value: interpolate(item.value, domain),
+          })),
+          whyItMatters: interpolate(spec.whyItMatters, domain),
+          remainsUnknown: interpolate(spec.remainsUnknown, domain),
+          method: spec.method,
+          observedAt,
+        },
+        { recommendation: v.recommendation ?? null },
+      ),
+    );
   }
   return observations;
 }
 
-function applyDomainOverrides(domain: string, observations: Observation[]) {
+function applyDomainOverrides(
+  domain: string,
+  observations: Observation[],
+  variant: Variant = "latest",
+) {
   const host = domain.toLowerCase();
   if (host === "jonesmfg.com") {
     return observations.map((obs) => {
-      if (obs.id === "headers") {
-        return {
+      if (obs.id === "web.hsts.v1") {
+        if (variant !== "latest") return obs;
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "HSTS and a restrictive CSP were present on the apex response.",
-          observed: `The apex HTTPS response for ${host} included Strict-Transport-Security and Content-Security-Policy.`,
+          status: "clear",
+          summary: "The response included HSTS with a positive max-age.",
+          observed: `The apex HTTPS response for ${host} included Strict-Transport-Security with max-age=31536000.`,
           evidence: [
             {
               label: "Strict-Transport-Security",
               value: "max-age=31536000; includeSubDomains",
             },
-            { label: "Content-Security-Policy", value: "default-src 'self'" },
           ],
-        };
+          recommendation: null,
+        });
       }
-      if (obs.id === "dmarc") {
-        return {
+      if (obs.id === "web.security_headers.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "DMARC policy is p=quarantine.",
+          status: "clear",
+          summary:
+            "The response included nosniff, a framing-policy declaration, CSP and a recognized Referrer-Policy.",
+          observed: `The apex HTTPS response for ${host} included nosniff, CSP and Referrer-Policy.`,
+          evidence: [
+            { label: "X-Content-Type-Options", value: "nosniff" },
+            { label: "Content-Security-Policy", value: "default-src 'self'" },
+            { label: "Referrer-Policy", value: "same-origin" },
+          ],
+          recommendation: null,
+        });
+      }
+      if (obs.id === "mail.dmarc.v1") {
+        return attachSource({
+          ...obs,
+          status: "clear",
+          summary: "A parseable DMARC quarantine or reject policy was observed.",
           observed: `DMARC was published for ${host}. Policy was p=quarantine.`,
           evidence: [{ label: "DMARC", value: "v=DMARC1; p=quarantine" }],
-        };
+          recommendation: null,
+        });
       }
-      if (obs.id === "spf") {
-        return {
+      if (obs.id === "mail.spf.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "SPF is published with a hard-fail all mechanism.",
-          observed: `SPF was published for ${host}.`,
+          status: "clear",
+          summary: "One SPF record was parseable and no unconditional pass mechanism was observed.",
+          observed: `SPF was published for ${host} with a hard-fail all mechanism.`,
           evidence: [{ label: "SPF", value: `v=spf1 include:_spf.${host} -all` }],
-        };
+        });
       }
       return obs;
     });
   }
   if (host === "mymsp.io") {
     return observations.map((obs) => {
-      if (obs.id === "dmarc") {
-        return {
+      if (obs.id === "mail.dmarc.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "DMARC policy is p=reject.",
+          status: "clear",
+          summary: "A parseable DMARC quarantine or reject policy was observed.",
           observed: `DMARC was published for ${host}. Policy was p=reject.`,
           evidence: [{ label: "DMARC", value: "v=DMARC1; p=reject" }],
-        };
+          recommendation: null,
+        });
       }
-      if (obs.id === "spf") {
-        return {
+      if (obs.id === "mail.spf.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "SPF is published with a hard-fail all mechanism.",
-          observed: `SPF was published for ${host}.`,
+          status: "clear",
+          summary: "One SPF record was parseable and no unconditional pass mechanism was observed.",
+          observed: `SPF was published for ${host} with a hard-fail all mechanism.`,
           evidence: [{ label: "SPF", value: `v=spf1 include:_spf.${host} -all` }],
-        };
+        });
       }
       return obs;
     });
   }
   if (host === "203.0.113.24") {
     return observations.map((obs) => {
-      if (obs.id === "tls") {
-        return {
+      if (obs.id === "tls.certificate.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: "A valid certificate was presented for this address.",
+          status: "needs_attention",
+          summary: "The observed certificate failed trust or hostname checks.",
           observed:
-            "A valid publicly trusted certificate was presented during the TLS handshake on port 443. The certificate name did not match a hostname on this address.",
+            "A certificate was presented during the TLS handshake on port 443. The certificate name did not match a hostname on this address.",
           evidence: [
             { label: "Observed address", value: host },
             { label: "Certificate subject", value: "CN=api.acme.com" },
             { label: "Issuer", value: "Let's Encrypt" },
             { label: "Protocol", value: "TLS 1.3" },
           ],
-        };
+          recommendation: "Review the certificate chain and hostname coverage.",
+        });
       }
-      if (obs.id === "headers") {
-        return {
+      if (obs.id === "web.security_headers.v1") {
+        return attachSource({
           ...obs,
-          status: "informational" as const,
-          summary: "HTTPS on this address returned a public response without HSTS.",
+          status: "informational",
+          summary:
+            "Nosniff and a framing-policy declaration were not fully observed on this address.",
           observed: `GET https://${host}/ returned 200. Strict-Transport-Security was not present.`,
           evidence: [
             { label: "Request", value: `GET https://${host}/` },
             { label: "Status", value: "200" },
-            { label: "Strict-Transport-Security", value: "Not present" },
+            { label: "X-Content-Type-Options", value: "nosniff" },
           ],
-        };
+        });
       }
-      if (obs.id === "banner") {
-        return {
+      if (obs.id === "net.public_banner.v1") {
+        return attachSource({
           ...obs,
-          status: "informational" as const,
+          status: "informational",
           summary: "SSH on port 22 returned a short identifying banner.",
           observed:
             "A bounded connection to port 22 returned SSH-2.0-OpenSSH. A banner is a public signal, not a finding of weakness.",
@@ -849,79 +959,96 @@ function applyDomainOverrides(domain: string, observations: Observation[]) {
             { label: "Port", value: "22" },
             { label: "Banner", value: "SSH-2.0-OpenSSH" },
           ],
-        };
+        });
       }
       return obs;
     });
   }
   if (host === "api.acme.com") {
     return observations.map((obs) => {
-      if (obs.id === "headers") {
-        return {
+      if (obs.id === "web.hsts.v1") {
+        if (variant !== "latest") {
+          return attachSource({
+            ...obs,
+            status: "clear",
+            summary: "The response included HSTS with a positive max-age.",
+            observed: `The HTTPS response for ${host} included Strict-Transport-Security.`,
+            evidence: [
+              { label: "Request", value: `GET https://${host}/` },
+              { label: "Status", value: "200" },
+              { label: "Strict-Transport-Security", value: "max-age=31536000" },
+            ],
+            recommendation: null,
+          });
+        }
+        return attachSource({
           ...obs,
-          status: "needs_attention" as const,
-          summary: "HSTS was not present on the API HTTPS response.",
-          observed: `The HTTPS response for ${host} did not include Strict-Transport-Security. Content-Security-Policy was also absent.`,
+          status: "needs_attention",
+          summary: "The response did not include HSTS.",
+          observed: `The HTTPS response for ${host} did not include Strict-Transport-Security.`,
           evidence: [
             { label: "Request", value: `GET https://${host}/` },
             { label: "Status", value: "200" },
             { label: "Strict-Transport-Security", value: "Not present" },
-            { label: "Content-Security-Policy", value: "Not present" },
           ],
-        };
+          recommendation:
+            "Consider a suitable Strict-Transport-Security policy after validating HTTPS coverage.",
+        });
       }
-      if (obs.id === "tech") {
-        return {
+      if (obs.id === "web.technology_signals.v1") {
+        return attachSource({
           ...obs,
-          status: "informational" as const,
+          status: "informational",
           summary: "Public responses named an API gateway and a JSON content type.",
           observed: `Responses from ${host} included a gateway header and application/json. This is a public signal, not a finding of weakness.`,
           evidence: [
             { label: "Content-Type", value: "application/json" },
             { label: "Server header", value: "cloudflare" },
           ],
-        };
+        });
       }
-      if (obs.id === "securitytxt") {
-        return {
+      if (obs.id === "web.security_txt.v1") {
+        return attachSource({
           ...obs,
-          status: "needs_attention" as const,
-          summary: "No security.txt was retrieved at the well-known path.",
+          status: "informational",
+          summary: "No security.txt file was observed at this location.",
           observed: `GET https://${host}/.well-known/security.txt returned 404.`,
           evidence: [
             { label: "Path", value: "/.well-known/security.txt" },
             { label: "Status", value: "404" },
           ],
-        };
+          recommendation: "Consider publishing security.txt at /.well-known/security.txt.",
+        });
       }
-      if (obs.id === "http") {
-        return {
+      if (obs.id === "web.https_redirect.v1") {
+        return attachSource({
           ...obs,
-          status: "clear" as const,
-          summary: `HTTPS on ${host} returned a public 200 response.`,
+          status: "clear",
+          summary: "The HTTP root request transitioned to a usable HTTPS response.",
           observed: `GET https://${host}/health returned HTTP 200.`,
           evidence: [
             { label: "Request", value: `GET https://${host}/health` },
             { label: "Status", value: "200" },
           ],
-        };
+        });
       }
       return obs;
     });
   }
-  if (host === "mail.acme.com" || host === "acme.com") {
+  if (host === "mail.acme.com") {
     return observations.map((obs) => {
-      if (host === "mail.acme.com" && obs.id === "headers") {
-        return {
+      if (obs.id === "web.https_redirect.v1" || obs.id === "web.hsts.v1" || obs.id === "web.security_headers.v1") {
+        return attachSource({
           ...obs,
-          status: "informational" as const,
-          summary: "The mail hostname did not return a web application on HTTPS.",
+          status: "informational",
+          summary: "The mail hostname did not return a usable HTTPS website response.",
           observed: `HTTPS on ${host} returned 404. This hostname appears to be used for mail, not a public website.`,
           evidence: [
             { label: "Request", value: `GET https://${host}/` },
             { label: "Status", value: "404" },
           ],
-        };
+          recommendation: null,
+        });
       }
       return obs;
     });
@@ -969,7 +1096,7 @@ export function buildPortObservations(
         ? "informational"
         : "clear";
     const serviceHint = def.name !== `Port ${port}` ? ` (${def.name})` : "";
-    return {
+    return attachSource({
       id: portCheckId(port),
       category: "Public services",
       name: `${port}/tcp`,
@@ -995,10 +1122,12 @@ export function buildPortObservations(
         ? `${def.name} is publicly reachable from the observation point. Reachability is evidence of a public service, not a vulnerability.`
         : "A port that did not respond in this bounded set is not a claim that the host has no other listeners.",
       remainsUnknown:
-        "This does not establish whether authentication is weak, the service is vulnerable, or access is unauthorized.",
+        "This does not establish whether authentication is weak, the service is vulnerable, or access is unauthorized. Ports other than the selected set were not checked. A future bounded product runner is required; this is not the public hostname snapshot and not an OFFSEC nmap workflow.",
       method: "TCP connection attempt",
       observedAt,
-    };
+      implementation: "MOCK_ONLY",
+      checkVersion: MOCK_CHECK_VERSION,
+    });
   });
 }
 
@@ -1014,6 +1143,7 @@ export function observationsForRun(input: {
   const checks = applyDomainOverrides(
     input.target,
     buildObservations(input.target.toLowerCase(), variant, input.observedAt, checkIds),
+    variant,
   );
   const catalogOrder = new Map(CHECK_CATALOG.map((check, index) => [check.id, index]));
   checks.sort((a, b) => {

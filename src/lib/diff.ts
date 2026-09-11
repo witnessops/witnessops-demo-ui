@@ -26,6 +26,8 @@ export interface ChangeDigest {
   toVersion?: string;
   fromRunbook?: string;
   toRunbook?: string;
+  addedChecks: { id: string; name: string }[];
+  retiredChecks: { id: string; name: string }[];
 }
 
 function coverageKey(run: ExposureRun) {
@@ -189,6 +191,13 @@ export function digestRunChange(
           (previous.runbookVersion ?? previous.checksetVersion)),
   );
 
+  const addedChecks = diffs
+    .filter((row) => row.kind === "coverage" && row.label === "new_check")
+    .map((row) => ({ id: row.observationId ?? row.name, name: row.name }));
+  const retiredChecks = diffs
+    .filter((row) => row.kind === "coverage" && row.label === "no_longer_checked")
+    .map((row) => ({ id: row.observationId ?? row.name, name: row.name }));
+
   return {
     newObservations,
     resolvedAttention,
@@ -204,6 +213,8 @@ export function digestRunChange(
     toVersion: current.runbookVersion ?? current.checksetVersion,
     fromRunbook: previous?.runbookName ?? previous?.checkset,
     toRunbook: current.runbookName ?? current.checkset,
+    addedChecks,
+    retiredChecks,
   };
 }
 

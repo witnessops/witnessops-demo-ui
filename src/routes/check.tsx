@@ -89,8 +89,9 @@ function PublicCheckPage() {
               What public checks observe about a hostname.
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-              A bounded, unauthenticated snapshot. This is not a penetration
-              test, and it does not produce a security score.
+              Ten defined public observations of one hostname. This is not a
+              penetration test, does not produce a score, and does not establish
+              the absence of vulnerabilities.
             </p>
             <form className="mt-8 grid gap-3" onSubmit={run}>
               <Label htmlFor="public-domain">Hostname</Label>

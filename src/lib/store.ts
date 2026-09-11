@@ -23,6 +23,8 @@ import {
   workspaceRunbooks,
 } from "./seed";
 import { observationsForRun } from "./observations";
+import { EXTERNAL_VERSION } from "./contracts";
+import { completionStateFor, mockSourceDigest } from "./snapshot";
 import {
   assetIdFor,
   inferAssetType,
@@ -126,7 +128,7 @@ const emptyState = {
 };
 
 function uniqueSlug(base: string, workspaces: Workspace[]) {
-  let slug = slugify(base);
+  const slug = slugify(base);
   const used = new Set(workspaces.map((ws) => ws.slug));
   if (!used.has(slug)) return slug;
   let i = 2;
@@ -381,8 +383,15 @@ export const useAppStore = create<AppState>()(
                   checksetVersion: `${checkIds.length}-checks`,
                   checkIds,
                 };
+        const observations = observationsForRun({
+          target: running.domain,
+          observedAt: running.observedAt,
+          checkIds,
+          ports: running.ports ?? runbook?.ports,
+        });
+        const id = nextRunId(workspaceRuns);
         const run: ExposureRun = {
-          id: nextRunId(workspaceRuns),
+          id,
           workspaceId: running.workspaceId,
           domain: running.domain,
           observedAt: running.observedAt,
@@ -397,11 +406,14 @@ export const useAppStore = create<AppState>()(
           runbookVersion: runbook?.version ?? meta.checksetVersion,
           ports: running.ports ?? runbook?.ports,
           kind: runbook?.kind,
-          observations: observationsForRun({
-            target: running.domain,
+          snapshotVersion:
+            source === "public" ? EXTERNAL_VERSION : (runbook?.version ?? meta.checksetVersion),
+          observations,
+          completionState: completionStateFor(observations),
+          sourceDigest: mockSourceDigest({
+            id,
+            domain: running.domain,
             observedAt: running.observedAt,
-            checkIds,
-            ports: running.ports ?? runbook?.ports,
           }),
         };
         set({ runs: [run, ...state.runs], running: null });
@@ -461,8 +473,9 @@ export const useAppStore = create<AppState>()(
           });
           return existing;
         }
+        const id = nextRunId(workspaceRuns);
         const run: ExposureRun = {
-          id: nextRunId(workspaceRuns),
+          id,
           workspaceId,
           domain: pending.domain,
           observedAt: pending.observedAt,
@@ -477,6 +490,13 @@ export const useAppStore = create<AppState>()(
           assetId: asset.id,
           runbookName: pending.checkset,
           runbookVersion: pending.checksetVersion,
+          snapshotVersion: pending.checksetVersion,
+          completionState: completionStateFor(pending.observations),
+          sourceDigest: mockSourceDigest({
+            id,
+            domain: pending.domain,
+            observedAt: pending.observedAt,
+          }),
         };
         set({
           runs: [run, ...state.runs],
@@ -548,9 +568,33 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: "witnessops-prototype-v3",
+      name: "witnessops-prototype-v6",
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
+      migrate: (persisted, version) => {
+        const state = persisted as {
+          workspaces?: Workspace[];
+          assets?: Asset[];
+          runs?: ExposureRun[];
+          runbooks?: Runbook[];
+          [key: string]: unknown;
+        };
+        if (version >= 6) return state as never;
+        return {
+          ...state,
+          signedIn: false,
+          user: null,
+          workspaces: [],
+          members: [],
+          runs: [],
+          assets: [],
+          runbooks: [],
+          lastWorkspaceSlug: null,
+          pendingSave: null,
+          companionsSeeded: false,
+        } as never;
+      },
       partialize: (state) => ({
         signedIn: state.signedIn,
         user: state.user,
