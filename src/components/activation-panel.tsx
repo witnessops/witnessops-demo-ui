@@ -23,21 +23,19 @@ export function ActivationPanel({
     <div className="rounded-xl border border-border bg-surface p-5 sm:p-6">
       <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
       <h2 className="mt-2 text-lg font-medium tracking-tight">
-        Keep this workspace active
+        Activate External Exposure
       </h2>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Keep assets, reusable runbooks and saved evidence in one workspace. The
-        snapshot you already have stays as it is.
+        Keep your assets, observations, history and reports in one workspace.
       </p>
       {compact ? null : (
         <ul className="mt-4 grid gap-1.5 text-sm text-fg-muted">
-          <li>Assets</li>
-          <li>Reusable runbooks</li>
-          <li>Saved runs</li>
+          <li>Multiple assets</li>
+          <li>Repeat observations</li>
           <li>Change history</li>
+          <li>Improving check coverage</li>
           <li>Reports</li>
-          <li>Workspace members</li>
-          <li>Repeat checks</li>
+          <li>Team access</li>
         </ul>
       )}
       <div className="mt-5 flex flex-wrap gap-2">

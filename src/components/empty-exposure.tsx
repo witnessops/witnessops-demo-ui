@@ -47,11 +47,11 @@ export function EmptyExposure({
       <div className="mx-auto max-w-lg py-6">
         <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
         <h1 className="mt-2 text-2xl font-medium tracking-tight">
-          No assets tracked yet.
+          Add what you want WitnessOps to watch.
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Add a domain, hostname, public IP or server, then run the recommended
-          runbook. Adding an asset does not prove ownership.
+          A domain, hostname or public IP is enough. Recommended checks are
+          already selected. Adding an asset does not prove ownership.
         </p>
         {canRun ? (
           <div className="mt-8">

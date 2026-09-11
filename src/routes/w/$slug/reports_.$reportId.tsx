@@ -3,10 +3,10 @@ import { toast } from "sonner";
 import { StatusPill, SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, runIdForReport, summarize } from "@/lib/format";
-import { runbookLabelFromRun } from "@/lib/runbooks";
+import { methodLabelFromRun, profileNameFromRun } from "@/lib/runbooks";
 import { useWorkspace, useWorkspaceRuns } from "@/lib/store";
 
-export const Route = createFileRoute("/w/$slug/reports/$reportId")({
+export const Route = createFileRoute("/w/$slug/reports_/$reportId")({
   component: ReportPage,
 });
 
@@ -32,6 +32,8 @@ function ReportPage() {
   const summary = summarize(run.observations);
   const attention = run.observations.filter((obs) => obs.status === "needs_attention");
   const informational = run.observations.filter((obs) => obs.status === "informational");
+  const method = methodLabelFromRun(run);
+  const profile = profileNameFromRun(run);
 
   function share() {
     const url = window.location.href;
@@ -68,7 +70,7 @@ function ReportPage() {
         </h1>
         <p className="mt-1 text-lg text-paper-muted">External Exposure Review</p>
         <p className="mt-2 font-mono text-xs text-paper-muted">
-          Asset: {run.domain} · Runbook: {runbookLabelFromRun(run)} · Observed{" "}
+          Asset: {run.domain} · Method: {method} · Observed{" "}
           {formatDateTime(run.observedAt)} · Observations completed:{" "}
           {summary.completed}/{summary.total}
         </p>
@@ -79,9 +81,9 @@ function ReportPage() {
           </div>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-paper-muted">
             Scope: one {run.kind === "authorized_active" ? "public address" : "hostname"}{" "}
-            observed using {runbookLabelFromRun(run)}. This report does not imply
-            that all company infrastructure was checked. Individual observations
-            are not an overall security grade.
+            observed using {profile}. This report does not imply that all
+            company infrastructure was checked. Individual observations are not
+            an overall security grade.
           </p>
         </div>
 
@@ -157,9 +159,7 @@ function ReportPage() {
         <section className="mt-8 border-t border-paper-fg/10 pt-6">
           <h2 className="text-sm font-medium">Limits</h2>
           <ul className="mt-3 list-disc space-y-1.5 pl-4 text-sm text-paper-muted">
-            <li>
-              Scope is this asset only, using {runbookLabelFromRun(run)}.
-            </li>
+            <li>Scope is this asset only, using {method}.</li>
             <li>Not a penetration test, certification, or security guarantee.</li>
             <li>
               Observed at {formatDateTime(run.observedAt)}. Conditions may have

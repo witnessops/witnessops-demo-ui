@@ -37,7 +37,7 @@ export function CheckPicker({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">Choose checks</p>
+        <p className="text-sm font-medium">Checks</p>
         <div className="flex gap-2">
           <button
             type="button"

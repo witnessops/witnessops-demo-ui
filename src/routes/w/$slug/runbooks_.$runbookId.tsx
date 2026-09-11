@@ -1,22 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 import { CheckPicker } from "@/components/check-picker";
 import { PortPicker } from "@/components/port-picker";
 import { RunningCheck } from "@/components/running-check";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  CHECK_CATALOG,
-  CHECK_GROUPS,
-  cadenceLabel,
-  profileCountLabel,
-  type Cadence,
-} from "@/lib/checks";
+import { CHECK_CATALOG, CHECK_GROUPS } from "@/lib/checks";
 import { formatDate } from "@/lib/format";
 import {
   assetTypeLabel,
   kindLabel,
-  runbookLabel,
+  methodLabel,
+  profileName,
   templateById,
 } from "@/lib/runbooks";
 import {
@@ -28,12 +23,23 @@ import {
   useWorkspaceRunbooks,
 } from "@/lib/store";
 
+type Search = {
+  asset?: string;
+};
+
 export const Route = createFileRoute("/w/$slug/runbooks_/$runbookId")({
+  validateSearch: (search: Record<string, unknown>): Search => {
+    if (typeof search.asset === "string" && search.asset.length > 0) {
+      return { asset: search.asset };
+    }
+    return {};
+  },
   component: RunbookPage,
 });
 
 function RunbookPage() {
   const { slug, runbookId } = Route.useParams();
+  const { asset: fromAsset } = Route.useSearch();
   const navigate = useNavigate();
   const workspace = useWorkspace(slug);
   const membership = useMembership(workspace?.id);
@@ -42,9 +48,9 @@ function RunbookPage() {
   const assets = useWorkspaceAssets(workspace?.id);
   const runbook = runbooks.find((item) => item.id === runbookId);
   const updateRunbook = useAppStore((state) => state.updateRunbook);
-  const startRun = useAppStore((state) => state.startRun);
   const completeRun = useAppStore((state) => state.completeRun);
   const running = useAppStore((state) => state.running);
+  const [advanced, setAdvanced] = useState(false);
   const template = runbook ? templateById(runbook.templateId) : undefined;
   const catalog = CHECK_CATALOG.filter(
     (check) =>
@@ -77,10 +83,10 @@ function RunbookPage() {
   if (!runbook) {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <h1 className="text-xl font-medium">Runbook not found</h1>
+        <h1 className="text-xl font-medium">Check profile not found</h1>
         <Button asChild className="mt-6" variant="secondary">
-          <Link to="/w/$slug/runbooks" params={{ slug }}>
-            Back to runbooks
+          <Link to="/w/$slug/assets" params={{ slug }}>
+            Back to assets
           </Link>
         </Button>
       </div>
@@ -88,77 +94,39 @@ function RunbookPage() {
   }
 
   const usedBy = assets.filter((item) => item.runbookId === runbook.id);
-  const workspaceId = workspace.id;
-  const current = runbook;
-
-  function runAgainst(id: string) {
-    const asset = usedBy.find((item) => item.id === id) ?? assets[0];
-    if (!asset) return;
-    startRun({
-      domain: asset.name,
-      workspaceId,
-      checkIds: current.checkIds,
-      source: "workspace",
-      assetId: asset.id,
-      runbookId: current.id,
-      ports: current.ports,
-    });
-  }
+  const returnAsset = assets.find((item) => item.id === fromAsset) ?? usedBy[0];
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        to="/w/$slug/runbooks"
-        params={{ slug }}
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-      >
-        <ArrowLeft className="size-3.5" />
-        Runbooks
-      </Link>
-      <p className="mt-5 font-mono text-xs text-fg-subtle">
-        {kindLabel(runbook.kind)}
-      </p>
+      {returnAsset ? (
+        <Link
+          to="/w/$slug/assets/$assetId"
+          params={{ slug, assetId: returnAsset.id }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          {returnAsset.name}
+        </Link>
+      ) : (
+        <Link
+          to="/w/$slug/assets"
+          params={{ slug }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          Assets
+        </Link>
+      )}
+      <p className="mt-5 font-mono text-xs text-fg-subtle">Edit checks</p>
       <h1 className="mt-1 text-3xl font-medium tracking-tight">
-        {runbookLabel(runbook)}
+        {profileName(runbook)}
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-muted">
         {runbook.description}
       </p>
-      <p className="mt-2 font-mono text-xs text-fg-subtle">
-        {profileCountLabel(runbook.checkIds.length)}
-        {runbook.ports.length > 0 ? ` · ${runbook.ports.length} ports` : ""}
-        {" · "}
-        Suitable for {runbook.supportedAssetTypes.map(assetTypeLabel).join(", ")}
-        {" · Last updated "}
-        {formatDate(runbook.updatedAt)}
-      </p>
-      {runbook.kind === "authorized_active" ? (
-        <p className="mt-3 text-sm text-fg-muted">
-          Only run against systems you are authorized to assess.
-        </p>
-      ) : (
-        <p className="mt-3 text-sm text-fg-muted">
-          Public observation. Low-impact outside-in checks against publicly
-          reachable information.
-        </p>
-      )}
       <p className="mt-2 text-xs text-fg-subtle">
-        Coverage improves. History stays comparable. New checks can be added to
-        future runs without changing previous evidence.
+        Future runs use these checks. Previous evidence stays as it was.
       </p>
-
-      {usedBy.length > 0 && owner ? (
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Button onClick={() => runAgainst(usedBy[0]!.id)}>
-            Run now{usedBy[0] ? ` on ${usedBy[0].name}` : ""}
-          </Button>
-          <Button variant="ghost" asChild>
-            <Link to="/w/$slug/assets" params={{ slug }}>
-              Choose asset
-            </Link>
-          </Button>
-        </div>
-      ) : null}
 
       {owner ? (
         <div className="mt-8">
@@ -198,32 +166,33 @@ function RunbookPage() {
         </div>
       ) : null}
 
-      {owner ? (
-        <div className="mt-8">
-          <p className="text-xs font-medium tracking-wide text-fg-subtle uppercase">
-            Repeat
+      <button
+        type="button"
+        className="mt-8 text-xs text-fg-muted hover:text-fg"
+        onClick={() => setAdvanced((open) => !open)}
+      >
+        {advanced ? "Hide advanced details" : "Advanced details"}
+      </button>
+      {advanced ? (
+        <div className="mt-3 rounded-xl border border-border px-4 py-4 text-sm text-fg-muted">
+          <p>
+            Runbook: {methodLabel(runbook)} · {kindLabel(runbook.kind)}
           </p>
-          <RadioGroup
-            className="mt-3 grid gap-2 sm:grid-cols-3"
-            value={runbook.cadence}
-            onValueChange={(value) =>
-              updateRunbook(runbook.id, { cadence: value as Cadence })
-            }
-          >
-            {(["manual", "weekly", "daily"] as const).map((value) => (
-              <label
-                key={value}
-                className="flex h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-surface"
-              >
-                <RadioGroupItem value={value} />
-                {cadenceLabel(value)}
-              </label>
-            ))}
-          </RadioGroup>
           <p className="mt-2 text-xs text-fg-subtle">
-            Scheduling is mocked in this prototype. It does not send
-            notifications.
+            Suitable for{" "}
+            {runbook.supportedAssetTypes.map(assetTypeLabel).join(", ")} · Last
+            updated {formatDate(runbook.updatedAt)}
           </p>
+          {runbook.kind === "authorized_active" ? (
+            <p className="mt-2 text-xs">
+              Only run against systems you are authorized to assess.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs">
+              Public observation. Low-impact outside-in checks against publicly
+              reachable information.
+            </p>
+          )}
         </div>
       ) : null}
 

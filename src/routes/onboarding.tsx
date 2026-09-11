@@ -40,9 +40,9 @@ function OnboardingPage() {
             Create your workspace
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-            This workspace holds your saved checks, reports, evidence and
-            history. It is an access container — not proof of company identity
-            or domain ownership.
+            This workspace holds your assets, observations, reports and history.
+            It is an access container — not proof of company identity or domain
+            ownership.
           </p>
           <div className="mt-8 grid gap-5">
             <div className="grid gap-1.5">

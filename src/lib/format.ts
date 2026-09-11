@@ -40,6 +40,11 @@ export function formatDate(iso: string) {
   return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
+export function formatShortDate(iso: string) {
+  const date = new Date(iso);
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+}
+
 export function formatDateTime(iso: string) {
   const date = new Date(iso);
   const hours = String(date.getUTCHours()).padStart(2, "0");
@@ -58,6 +63,15 @@ export function statusLabel(status: ObservationStatus) {
     case "informational":
       return "Informational";
   }
+}
+
+export function attentionCopy(count: number) {
+  if (count === 0) return "No attention";
+  return count === 1 ? "1 needs attention" : `${count} need attention`;
+}
+
+export function changeCopy(count: number) {
+  return count === 1 ? "1 change" : `${count} changes`;
 }
 
 export function diffLabel(label: DiffLabel) {

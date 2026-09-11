@@ -19,13 +19,14 @@ import { Route as WSlugIndexRouteImport } from './routes/w/$slug/index'
 import { Route as WSlugAssetsRouteImport } from './routes/w/$slug/assets'
 import { Route as WSlugExposureRouteImport } from './routes/w/$slug/exposure'
 import { Route as WSlugMembersRouteImport } from './routes/w/$slug/members'
+import { Route as WSlugReportsRouteImport } from './routes/w/$slug/reports'
 import { Route as WSlugRunbooksRouteImport } from './routes/w/$slug/runbooks'
 import { Route as WSlugSettingsRouteImport } from './routes/w/$slug/settings'
 import { Route as WSlugAssetsAssetIdRouteImport } from './routes/w/$slug/assets_.$assetId'
 import { Route as WSlugAssetsNewRouteImport } from './routes/w/$slug/assets_.new'
 import { Route as WSlugExposureRunIdRouteImport } from './routes/w/$slug/exposure_.$runId'
 import { Route as WSlugExposureNewRouteImport } from './routes/w/$slug/exposure_.new'
-import { Route as WSlugReportsReportIdRouteImport } from './routes/w/$slug/reports.$reportId'
+import { Route as WSlugReportsReportIdRouteImport } from './routes/w/$slug/reports_.$reportId'
 import { Route as WSlugRunbooksRunbookIdRouteImport } from './routes/w/$slug/runbooks_.$runbookId'
 import { Route as WSlugExposureRunIdObsIdRouteImport } from './routes/w/$slug/exposure_.$runId_.$obsId'
 
@@ -79,6 +80,11 @@ const WSlugMembersRoute = WSlugMembersRouteImport.update({
   path: '/members',
   getParentRoute: () => WSlugRoute,
 } as any)
+const WSlugReportsRoute = WSlugReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => WSlugRoute,
+} as any)
 const WSlugRunbooksRoute = WSlugRunbooksRouteImport.update({
   id: '/runbooks',
   path: '/runbooks',
@@ -110,7 +116,7 @@ const WSlugExposureNewRoute = WSlugExposureNewRouteImport.update({
   getParentRoute: () => WSlugRoute,
 } as any)
 const WSlugReportsReportIdRoute = WSlugReportsReportIdRouteImport.update({
-  id: '/reports/$reportId',
+  id: '/reports_/$reportId',
   path: '/reports/$reportId',
   getParentRoute: () => WSlugRoute,
 } as any)
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/reports': typeof WSlugReportsRoute
   '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/reports': typeof WSlugReportsRoute
   '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug': typeof WSlugIndexRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/reports': typeof WSlugReportsRoute
   '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
@@ -184,7 +193,7 @@ export interface FileRoutesById {
   '/w/$slug/assets_/new': typeof WSlugAssetsNewRoute
   '/w/$slug/exposure_/$runId': typeof WSlugExposureRunIdRoute
   '/w/$slug/exposure_/new': typeof WSlugExposureNewRoute
-  '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
+  '/w/$slug/reports_/$reportId': typeof WSlugReportsReportIdRoute
   '/w/$slug/runbooks_/$runbookId': typeof WSlugRunbooksRunbookIdRoute
   '/w/$slug/exposure_/$runId_/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/reports'
     | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug/'
@@ -220,6 +230,7 @@ export interface FileRouteTypes {
     | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/reports'
     | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug'
@@ -241,6 +252,7 @@ export interface FileRouteTypes {
     | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/reports'
     | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug/'
@@ -248,7 +260,7 @@ export interface FileRouteTypes {
     | '/w/$slug/assets_/new'
     | '/w/$slug/exposure_/$runId'
     | '/w/$slug/exposure_/new'
-    | '/w/$slug/reports/$reportId'
+    | '/w/$slug/reports_/$reportId'
     | '/w/$slug/runbooks_/$runbookId'
     | '/w/$slug/exposure_/$runId_/$obsId'
   fileRoutesById: FileRoutesById
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugMembersRouteImport
       parentRoute: typeof WSlugRoute
     }
+    '/w/$slug/reports': {
+      id: '/w/$slug/reports'
+      path: '/reports'
+      fullPath: '/w/$slug/reports'
+      preLoaderRoute: typeof WSlugReportsRouteImport
+      parentRoute: typeof WSlugRoute
+    }
     '/w/$slug/runbooks': {
       id: '/w/$slug/runbooks'
       path: '/runbooks'
@@ -376,8 +395,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugExposureNewRouteImport
       parentRoute: typeof WSlugRoute
     }
-    '/w/$slug/reports/$reportId': {
-      id: '/w/$slug/reports/$reportId'
+    '/w/$slug/reports_/$reportId': {
+      id: '/w/$slug/reports_/$reportId'
       path: '/reports/$reportId'
       fullPath: '/w/$slug/reports/$reportId'
       preLoaderRoute: typeof WSlugReportsReportIdRouteImport
@@ -404,6 +423,7 @@ interface WSlugRouteChildren {
   WSlugAssetsRoute: typeof WSlugAssetsRoute
   WSlugExposureRoute: typeof WSlugExposureRoute
   WSlugMembersRoute: typeof WSlugMembersRoute
+  WSlugReportsRoute: typeof WSlugReportsRoute
   WSlugRunbooksRoute: typeof WSlugRunbooksRoute
   WSlugSettingsRoute: typeof WSlugSettingsRoute
   WSlugIndexRoute: typeof WSlugIndexRoute
@@ -420,6 +440,7 @@ const WSlugRouteChildren: WSlugRouteChildren = {
   WSlugAssetsRoute: WSlugAssetsRoute,
   WSlugExposureRoute: WSlugExposureRoute,
   WSlugMembersRoute: WSlugMembersRoute,
+  WSlugReportsRoute: WSlugReportsRoute,
   WSlugRunbooksRoute: WSlugRunbooksRoute,
   WSlugSettingsRoute: WSlugSettingsRoute,
   WSlugIndexRoute: WSlugIndexRoute,

@@ -128,11 +128,26 @@ export function instantiateRunbooks(
   }));
 }
 
-export function runbookLabel(runbook: Pick<Runbook, "name" | "version">) {
+export function profileName(runbook: Pick<Runbook, "name">) {
+  return runbook.name;
+}
+
+export function methodLabel(runbook: Pick<Runbook, "name" | "version">) {
   return `${runbook.name} ${runbook.version}`;
 }
 
-export function runbookLabelFromRun(run: {
+export function runbookLabel(runbook: Pick<Runbook, "name" | "version">) {
+  return methodLabel(runbook);
+}
+
+export function profileNameFromRun(run: {
+  runbookName?: string;
+  checkset: string;
+}) {
+  return run.runbookName ?? run.checkset;
+}
+
+export function methodLabelFromRun(run: {
   runbookName?: string;
   runbookVersion?: string;
   checkset: string;
@@ -142,6 +157,15 @@ export function runbookLabelFromRun(run: {
   const version = run.runbookVersion ?? run.checksetVersion;
   if (!version || version === name || version === "public") return name;
   return `${name} ${version}`;
+}
+
+export function runbookLabelFromRun(run: {
+  runbookName?: string;
+  runbookVersion?: string;
+  checkset: string;
+  checksetVersion: string;
+}) {
+  return methodLabelFromRun(run);
 }
 
 export function kindLabel(kind: RunbookKind) {
@@ -195,4 +219,10 @@ export function assetIdFor(workspaceId: string, name: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return `asset-${workspaceId}-${slug || "host"}`;
+}
+
+export function observeActionLabel(templateId?: RunbookTemplateId | string) {
+  return templateId === "public-services"
+    ? "Observe public services"
+    : "Add and observe";
 }

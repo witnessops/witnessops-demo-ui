@@ -1,11 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { formatDate } from "@/lib/format";
-import { assetTypeLabel, kindLabel, runbookLabel } from "@/lib/runbooks";
+import { kindLabel, profileName } from "@/lib/runbooks";
 import {
-  isOwner,
-  useAppStore,
-  useMembership,
   useWorkspace,
   useWorkspaceAssets,
   useWorkspaceRunbooks,
@@ -17,31 +13,26 @@ export const Route = createFileRoute("/w/$slug/runbooks")({
 
 function RunbooksPage() {
   const { slug } = Route.useParams();
-  const navigate = useNavigate();
   const workspace = useWorkspace(slug);
-  const membership = useMembership(workspace?.id);
-  const owner = isOwner(membership?.role);
   const runbooks = useWorkspaceRunbooks(workspace?.id);
   const assets = useWorkspaceAssets(workspace?.id);
-  const duplicateRunbook = useAppStore((state) => state.duplicateRunbook);
 
   if (!workspace) return null;
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-tight">Runbooks</h1>
-        </div>
-      </div>
+      <p className="font-mono text-xs text-fg-subtle">Advanced</p>
+      <h1 className="mt-2 text-3xl font-medium tracking-tight">
+        Observation profiles
+      </h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-fg-muted">
-        A runbook defines what WitnessOps will observe, using which methods.
-        Coverage can improve over time. Previous runs stay comparable.
+        Each profile is the set of checks used when an asset is observed.
+        Coverage can improve. Previous evidence stays as it was.
       </p>
       <ul className="mt-8 grid gap-3">
         {runbooks.map((runbook) => {
-          const used = assets.filter((asset) => asset.runbookId === runbook.id).length;
+          const used = assets.filter((asset) => asset.runbookId === runbook.id)
+            .length;
           return (
             <li
               key={runbook.id}
@@ -50,49 +41,32 @@ function RunbooksPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-medium tracking-tight">
-                    {runbookLabel(runbook)}
+                    {profileName(runbook)}
                   </h2>
-                  <p className="mt-1 text-sm text-fg-muted">{runbook.description}</p>
-                  <p className="mt-3 font-mono text-xs text-fg-subtle">
+                  <p className="mt-1 text-sm text-fg-muted">
+                    {runbook.description}
+                  </p>
+                  <p className="mt-3 text-xs text-fg-subtle">
                     {runbook.checkIds.length} checks
-                    {runbook.ports.length > 0 ? ` · ${runbook.ports.length} ports` : ""}
-                    {" · "}
-                    {runbook.supportedAssetTypes.map(assetTypeLabel).join(", ")}
+                    {runbook.ports.length > 0
+                      ? ` · ${runbook.ports.length} ports`
+                      : ""}
+                    {used > 0 ? ` · Used by ${used} assets` : ""}
                     {" · "}
                     {kindLabel(runbook.kind)}
                   </p>
-                  <p className="mt-1 text-xs text-fg-subtle">
-                    Last updated {formatDate(runbook.updatedAt)}
-                    {used > 0 ? ` · Used by ${used} assets` : ""}
+                  <p className="mt-1 font-mono text-[11px] text-fg-subtle">
+                    Runbook: {runbook.name} {runbook.version} · Updated{" "}
+                    {formatDate(runbook.updatedAt)}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" asChild>
-                    <Link
-                      to="/w/$slug/runbooks/$runbookId"
-                      params={{ slug, runbookId: runbook.id }}
-                    >
-                      View
-                    </Link>
-                  </Button>
-                  {owner ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const copy = duplicateRunbook(runbook.id);
-                        if (copy) {
-                          void navigate({
-                            to: "/w/$slug/runbooks/$runbookId",
-                            params: { slug, runbookId: copy.id },
-                          });
-                        }
-                      }}
-                    >
-                      Duplicate
-                    </Button>
-                  ) : null}
-                </div>
+                <Link
+                  to="/w/$slug/runbooks/$runbookId"
+                  params={{ slug, runbookId: runbook.id }}
+                  className="text-xs text-fg-muted hover:text-fg"
+                >
+                  Edit checks
+                </Link>
               </div>
             </li>
           );

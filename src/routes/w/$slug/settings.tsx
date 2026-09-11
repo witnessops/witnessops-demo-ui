@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -100,6 +100,17 @@ function SettingsPage() {
           <dd className="text-fg">{owner ? "Owner" : "Viewer"}</dd>
         </div>
       </dl>
+
+      <p className="mt-8 text-xs text-fg-subtle">
+        Advanced:{" "}
+        <Link
+          to="/w/$slug/runbooks"
+          params={{ slug }}
+          className="text-fg-muted hover:text-fg"
+        >
+          Observation profiles
+        </Link>
+      </p>
     </div>
   );
 }

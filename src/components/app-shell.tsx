@@ -7,7 +7,6 @@ import {
   Menu,
   RotateCcw,
   Settings,
-  Shield,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -33,26 +32,27 @@ import { cn } from "@/lib/utils";
 function navItems(slug: string) {
   return [
     { to: "/w/$slug" as const, label: "Overview", icon: LayoutGrid, params: { slug } },
+    { to: "/w/$slug/assets" as const, label: "Assets", icon: Box, params: { slug } },
     {
-      to: "/w/$slug/assets" as const,
-      label: "Assets",
-      icon: Box,
-      params: { slug },
-    },
-    {
-      to: "/w/$slug/exposure" as const,
-      label: "External Exposure",
-      icon: Shield,
+      to: "/w/$slug/reports" as const,
+      label: "Reports",
+      icon: FileText,
       params: { slug },
     },
   ];
 }
 
-const laterItems = [
-  { label: "Proofpacks", icon: FileText },
-  { label: "Agent Actions", icon: Shield },
-  { label: "Workflow Reviews", icon: FileText },
-];
+function navHref(slug: string, to: string) {
+  if (to === "/w/$slug") return `/w/${slug}`;
+  if (to === "/w/$slug/assets") return `/w/${slug}/assets`;
+  return `/w/${slug}/reports`;
+}
+
+function isActive(pathname: string, slug: string, to: string) {
+  const href = navHref(slug, to);
+  if (to === "/w/$slug") return pathname === href;
+  return pathname.startsWith(href);
+}
 
 function NavLinks({
   slug,
@@ -67,19 +67,6 @@ function NavLinks({
     <div className="flex flex-col gap-6">
       <nav className="grid gap-0.5">
         {navItems(slug).map((item) => {
-          const href =
-            item.to === "/w/$slug"
-              ? `/w/${slug}`
-              : item.to === "/w/$slug/assets"
-                ? `/w/${slug}/assets`
-                : `/w/${slug}/exposure`;
-          const active =
-            item.to === "/w/$slug"
-              ? pathname === href
-              : item.to === "/w/$slug/assets"
-                ? pathname.startsWith(href)
-                : pathname.startsWith(`/w/${slug}/exposure`) ||
-                  pathname.startsWith(`/w/${slug}/runbooks`);
           const Icon = item.icon;
           return (
             <Link
@@ -89,7 +76,7 @@ function NavLinks({
               onClick={onNavigate}
               className={cn(
                 "flex h-10 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors",
-                active
+                isActive(pathname, slug, item.to)
                   ? "bg-surface text-fg"
                   : "text-fg-muted hover:bg-surface/70 hover:text-fg",
               )}
@@ -100,7 +87,7 @@ function NavLinks({
           );
         })}
       </nav>
-      <div className="grid gap-0.5">
+      <div className="grid gap-0.5 border-t border-border pt-4">
         <Link
           to="/w/$slug/members"
           params={{ slug }}
@@ -129,28 +116,6 @@ function NavLinks({
           <Settings className="size-4" />
           Settings
         </Link>
-      </div>
-      <div>
-        <p className="px-2.5 pb-2 text-[10px] tracking-[0.14em] text-fg-subtle uppercase">
-          Later
-        </p>
-        <div className="grid gap-0.5">
-          {laterItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <span
-                key={item.label}
-                className="flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm text-fg-subtle"
-              >
-                <Icon className="size-4" />
-                <span className="flex-1">{item.label}</span>
-                <span className="text-[10px] tracking-wide uppercase">
-                  Coming
-                </span>
-              </span>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

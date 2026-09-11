@@ -23,13 +23,11 @@ function envLines(digest: ChangeDigest) {
         : `${digest.newObservations} new observations on existing checks`,
     );
   }
-  if (lines.length === 0) {
+  if (lines.length === 0 && digest.envChanged > 0) {
     lines.push(
-      digest.envChanged === 0
-        ? "No material change"
-        : digest.envChanged === 1
-          ? "1 environment change"
-          : `${digest.envChanged} environment changes`,
+      digest.envChanged === 1
+        ? "1 environment change"
+        : `${digest.envChanged} environment changes`,
     );
   }
   return lines;
@@ -51,59 +49,47 @@ function coverageLines(digest: ChangeDigest) {
         : `${digest.checksRetired} checks retired`,
     );
   }
-  if (digest.runbookChanged) {
-    const from = digest.fromRunbook
-      ? `${digest.fromRunbook}${digest.fromVersion ? ` ${digest.fromVersion}` : ""}`
-      : "previous runbook";
-    const to = digest.toRunbook
-      ? `${digest.toRunbook}${digest.toVersion ? ` ${digest.toVersion}` : ""}`
-      : "current runbook";
-    lines.push(`Runbook changed from ${from} to ${to}`);
-  }
-  if (lines.length === 0) {
-    lines.push("Same runbook and checks");
-  }
   return lines;
 }
 
 export function ChangeDigestLines({ digest }: { digest: ChangeDigest }) {
-  if (
-    digest.totalMaterial === 0 &&
-    !digest.methodChanged &&
-    !digest.runbookChanged
-  ) {
+  const env = envLines(digest);
+  const coverage = coverageLines(digest);
+  const coverageChanged = coverage.length > 0;
+
+  if (env.length === 0 && !coverageChanged) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-medium text-fg">Environment</p>
-          <p className="mt-1 text-xs text-fg-muted">No material change</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-fg">Coverage</p>
-          <p className="mt-1 text-xs text-fg-muted">Same runbook and checks</p>
-        </div>
-      </div>
+      <p className="text-xs text-fg-muted">
+        No material change since previous run.
+      </p>
     );
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div>
-        <p className="text-xs font-medium text-fg">Environment</p>
-        <ul className="mt-1 grid gap-1 text-xs text-fg-muted">
-          {envLines(digest).map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-fg">Coverage</p>
-        <ul className="mt-1 grid gap-1 text-xs text-fg-muted">
-          {coverageLines(digest).map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-      </div>
+    <div className="grid gap-3">
+      <p className="text-xs font-medium text-fg">What changed</p>
+      {env.length > 0 ? (
+        <div>
+          <p className="text-xs text-fg-subtle">Environment</p>
+          <ul className="mt-1 grid gap-1 text-xs text-fg-muted">
+            {env.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {coverageChanged ? (
+        <div>
+          <p className="text-xs text-fg-subtle">Coverage</p>
+          <ul className="mt-1 grid gap-1 text-xs text-fg-muted">
+            {coverage.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-xs text-fg-subtle">Coverage unchanged</p>
+      )}
     </div>
   );
 }
