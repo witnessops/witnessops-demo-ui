@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { PUBLIC_CHECK_IDS, stepsForIds } from "@/lib/checks";
+import { portDef } from "@/lib/ports";
 import { cn } from "@/lib/utils";
 
 export function RunningCheck({
   domain,
   checkIds = PUBLIC_CHECK_IDS,
+  ports = [],
   onDone,
 }: {
   domain: string;
   checkIds?: string[];
+  ports?: number[];
   onDone: () => void;
 }) {
-  const steps = stepsForIds(checkIds);
+  const checks = stepsForIds(checkIds);
+  const portSteps = ports.map((port) => {
+    const def = portDef(port);
+    return { id: `port-${port}`, name: `${port}/tcp ${def.name}` };
+  });
+  const steps = [...checks, ...portSteps];
   const [index, setIndex] = useState(0);
   const doneRef = useRef(false);
   const onDoneRef = useRef(onDone);
@@ -50,8 +58,8 @@ export function RunningCheck({
         Observing {domain}
       </h1>
       <p className="mt-2 text-sm text-fg-muted">
-        {steps.length} public checks. Unauthenticated. The result is a snapshot
-        at this time, not a security grade.
+        {steps.length} checks. The result is a snapshot at this time, not a
+        security grade.
       </p>
       <ol className="mt-8 grid gap-1.5">
         {steps.map((step, i) => {

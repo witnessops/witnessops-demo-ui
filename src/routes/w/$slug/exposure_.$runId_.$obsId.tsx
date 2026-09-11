@@ -56,7 +56,7 @@ function ObservationPage() {
       </Link>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <p className="font-mono text-xs text-fg-subtle">{observation.category}</p>
-        <StatusPill status={observation.status} />
+        <StatusPill status={observation.status} label={observation.statusLabel} />
       </div>
       <h1 className="mt-2 text-3xl font-medium tracking-tight">
         {observation.name}

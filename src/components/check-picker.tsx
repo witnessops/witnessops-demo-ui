@@ -3,18 +3,27 @@ import {
   CHECK_CATALOG,
   CHECK_GROUPS,
   OPTIONAL_CHECK_IDS,
-  ALL_CHECK_IDS,
+  type CheckDef,
+  type CheckGroup,
 } from "@/lib/checks";
 import { cn } from "@/lib/utils";
 
 export function CheckPicker({
   selected,
   onChange,
+  catalog = CHECK_CATALOG,
+  groups = CHECK_GROUPS,
+  optionalIds,
 }: {
   selected: string[];
   onChange: (ids: string[]) => void;
+  catalog?: CheckDef[];
+  groups?: CheckGroup[];
+  optionalIds?: string[];
 }) {
   const selectedSet = new Set(selected);
+  const allIds = catalog.map((check) => check.id);
+  const optional = optionalIds ?? OPTIONAL_CHECK_IDS.filter((id) => allIds.includes(id));
 
   function toggle(id: string) {
     if (selectedSet.has(id)) {
@@ -28,12 +37,12 @@ export function CheckPicker({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">Choose what to check</p>
+        <p className="text-sm font-medium">Choose checks</p>
         <div className="flex gap-2">
           <button
             type="button"
             className="text-xs text-fg-muted hover:text-fg"
-            onClick={() => onChange([...ALL_CHECK_IDS])}
+            onClick={() => onChange([...allIds])}
           >
             Select all
           </button>
@@ -41,7 +50,7 @@ export function CheckPicker({
             type="button"
             className="text-xs text-fg-muted hover:text-fg"
             onClick={() =>
-              onChange(selected.filter((id) => !OPTIONAL_CHECK_IDS.includes(id)))
+              onChange(selected.filter((id) => !optional.includes(id)))
             }
           >
             Clear optional checks
@@ -49,8 +58,9 @@ export function CheckPicker({
         </div>
       </div>
       <div className="mt-4 grid gap-6">
-        {CHECK_GROUPS.map((group) => {
-          const checks = CHECK_CATALOG.filter((check) => check.group === group.id);
+        {groups.map((group) => {
+          const checks = catalog.filter((check) => check.group === group.id);
+          if (checks.length === 0) return null;
           return (
             <section key={group.id}>
               <h3 className="text-xs font-medium tracking-wide text-fg-subtle uppercase">

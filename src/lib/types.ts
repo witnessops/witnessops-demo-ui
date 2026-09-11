@@ -17,6 +17,12 @@ export type DiffLabel =
 
 export type MemberStatus = "active" | "invited";
 
+export type AssetType = "domain" | "hostname" | "public_ip" | "server";
+
+export type RunbookKind = "public_observation" | "authorized_active";
+
+export type RunbookTemplateId = "web" | "mail" | "public-services" | "certificate";
+
 export interface User {
   id: string;
   name: string;
@@ -39,6 +45,30 @@ export interface Workspace {
   checkProfile: CheckProfile;
 }
 
+export interface Asset {
+  id: string;
+  workspaceId: string;
+  name: string;
+  type: AssetType;
+  runbookId: string;
+  createdAt: string;
+}
+
+export interface Runbook {
+  id: string;
+  workspaceId: string;
+  templateId: RunbookTemplateId;
+  name: string;
+  version: string;
+  description: string;
+  checkIds: string[];
+  ports: number[];
+  cadence: Cadence;
+  kind: RunbookKind;
+  supportedAssetTypes: AssetType[];
+  updatedAt: string;
+}
+
 export interface Member {
   id: string;
   workspaceId: string;
@@ -58,6 +88,7 @@ export interface Observation {
   category: string;
   name: string;
   status: ObservationStatus;
+  statusLabel?: string;
   summary: string;
   checked: string;
   observed: string;
@@ -81,6 +112,12 @@ export interface ExposureRun {
   status: "completed";
   observations: Observation[];
   source: "workspace" | "public";
+  assetId?: string;
+  runbookId?: string;
+  runbookName?: string;
+  runbookVersion?: string;
+  ports?: number[];
+  kind?: RunbookKind;
 }
 
 export interface Summary {
@@ -107,4 +144,7 @@ export interface RunningCheck {
   observedAt: string;
   checkIds: string[];
   source?: ExposureRun["source"];
+  assetId?: string;
+  runbookId?: string;
+  ports?: number[];
 }

@@ -1,9 +1,6 @@
-import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { RunningCheck } from "@/components/running-check";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PUBLIC_CHECK_IDS } from "@/lib/checks";
 import { useAppStore } from "@/lib/store";
 import type { Workspace } from "@/lib/types";
@@ -19,13 +16,19 @@ export function EmptyExposure({
   const startRun = useAppStore((state) => state.startRun);
   const completeRun = useAppStore((state) => state.completeRun);
   const running = useAppStore((state) => state.running);
-  const [domain, setDomain] = useState(workspace.primaryDomain);
+  const assets = useAppStore((state) =>
+    state.assets.filter((asset) => asset.workspaceId === workspace.id),
+  );
+  const runbooks = useAppStore((state) =>
+    state.runbooks.filter((runbook) => runbook.workspaceId === workspace.id),
+  );
 
   if (running?.workspaceId === workspace.id) {
     return (
       <RunningCheck
         domain={running.domain}
         checkIds={running.checkIds}
+        ports={running.ports}
         onDone={() => {
           const run = completeRun();
           if (run) {
@@ -44,32 +47,34 @@ export function EmptyExposure({
       <div className="mx-auto max-w-lg py-6">
         <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
         <h1 className="mt-2 text-2xl font-medium tracking-tight">
-          No domains monitored yet.
+          No assets tracked yet.
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Observe what is publicly visible about a hostname and track how it
-          changes over time.
+          Add a domain, hostname, public IP or server, then run the recommended
+          runbook. Adding an asset does not prove ownership.
         </p>
         {canRun ? (
           <div className="mt-8">
             <Button asChild>
               <Link
-                to="/w/$slug/exposure/new"
+                to="/w/$slug/assets/new"
                 params={{ slug: workspace.slug }}
-                search={{ edit: true }}
               >
-                Add domain
+                Add asset
               </Link>
             </Button>
           </div>
         ) : (
           <p className="mt-8 text-sm text-fg-muted">
-            Only an owner can add a domain in this workspace.
+            Only an owner can add an asset in this workspace.
           </p>
         )}
       </div>
     );
   }
+
+  const asset = assets[0];
+  const runbook = runbooks.find((item) => item.id === asset?.runbookId);
 
   return (
     <div className="mx-auto max-w-lg py-6">
@@ -83,37 +88,24 @@ export function EmptyExposure({
         security assessment.
       </p>
       {canRun ? (
-        <form
-          className="mt-8 grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const host = domain
-              .trim()
-              .toLowerCase()
-              .replace(/^https?:\/\//, "")
-              .replace(/\/.*$/, "");
-            if (!host) return;
-            startRun({
-              domain: host,
-              workspaceId: workspace.id,
-              checkIds: PUBLIC_CHECK_IDS,
-              source: "public",
-            });
-          }}
-        >
-          <Label htmlFor="empty-domain">Hostname</Label>
-          <Input
-            id="empty-domain"
-            value={domain}
-            onChange={(event) => setDomain(event.target.value)}
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <div className="pt-2">
-            <Button type="submit">Run a first observation</Button>
-          </div>
-        </form>
+        <div className="mt-8">
+          <Button
+            onClick={() => {
+              const host = asset?.name || workspace.primaryDomain;
+              if (!host) return;
+              startRun({
+                domain: host,
+                workspaceId: workspace.id,
+                checkIds: runbook?.checkIds ?? PUBLIC_CHECK_IDS,
+                source: "public",
+                assetId: asset?.id,
+                runbookId: runbook?.id,
+              });
+            }}
+          >
+            Run a first observation
+          </Button>
+        </div>
       ) : (
         <p className="mt-8 text-sm text-fg-muted">
           Only an owner can run a check in this workspace.

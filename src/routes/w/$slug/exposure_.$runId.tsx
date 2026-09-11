@@ -6,8 +6,9 @@ import { ObservationList } from "@/components/observation-list";
 import { RunningCheck } from "@/components/running-check";
 import { SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { digestRunChange } from "@/lib/diff";
+import { digestRunChange, previousRunFor } from "@/lib/diff";
 import { formatDateTime, reportIdForRun, summarize } from "@/lib/format";
+import { kindLabel, runbookLabelFromRun } from "@/lib/runbooks";
 import {
   isOwner,
   useAppStore,
@@ -38,6 +39,7 @@ function ExposureRunPage() {
       <RunningCheck
         domain={running.domain}
         checkIds={running.checkIds}
+        ports={running.ports}
         onDone={() => {
           const next = completeRun();
           if (next) {
@@ -68,36 +70,48 @@ function ExposureRunPage() {
   }
 
   const summary = summarize(run.observations);
-  const runIndex = runs.findIndex((item) => item.id === run.id);
-  const previous = runIndex >= 0 ? runs[runIndex + 1] : undefined;
+  const previous = previousRunFor(run, runs);
   const digest = digestRunChange(run, previous);
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        to="/w/$slug/exposure"
-        params={{ slug }}
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-      >
-        <ArrowLeft className="size-3.5" />
-        Run history
-      </Link>
+      {run.assetId ? (
+        <Link
+          to="/w/$slug/assets/$assetId"
+          params={{ slug, assetId: run.assetId }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to asset
+        </Link>
+      ) : (
+        <Link
+          to="/w/$slug/exposure"
+          params={{ slug }}
+          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          <ArrowLeft className="size-3.5" />
+          Run history
+        </Link>
+      )}
       <p className="mt-5 font-mono text-xs text-fg-subtle">{run.domain}</p>
       <h1 className="mt-1 text-3xl font-medium tracking-tight">
         External Exposure review
       </h1>
       <p className="mt-3 text-sm text-fg-muted">
-        Observed {formatDateTime(run.observedAt)} · {run.checkset} ·{" "}
-        {run.checksetVersion} · Observations completed: {summary.completed}/
-        {summary.total}
+        Observed {formatDateTime(run.observedAt)} · {runbookLabelFromRun(run)} ·
+        Observations completed: {summary.completed}/{summary.total}
         {run.savedAt
           ? ` · Saved to ${workspace.name} ${formatDateTime(run.savedAt)}`
           : null}
       </p>
       <p className="mt-2 text-sm text-fg-muted">
-        What these public checks observed about this hostname. This is not a
-        complete security assessment.
+        What these checks observed about this asset using {runbookLabelFromRun(run)}.
+        This is not a complete security assessment.
       </p>
+      {run.kind ? (
+        <p className="mt-1 text-xs text-fg-subtle">{kindLabel(run.kind)}</p>
+      ) : null}
 
       {!workspace.exposureActive && owner ? (
         <div className="mt-6">
@@ -106,9 +120,8 @@ function ExposureRunPage() {
             compact
             onActivated={() =>
               void navigate({
-                to: "/w/$slug/exposure/new",
+                to: "/w/$slug/assets",
                 params: { slug },
-                search: { edit: true },
               })
             }
           />
@@ -119,10 +132,7 @@ function ExposureRunPage() {
         <SummaryCounts summary={summary} />
         {previous ? (
           <div className="mt-4">
-            <p className="text-xs font-medium text-fg">Since previous run</p>
-            <div className="mt-2">
-              <ChangeDigestLines digest={digest} />
-            </div>
+            <ChangeDigestLines digest={digest} />
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
@@ -134,7 +144,16 @@ function ExposureRunPage() {
               View report
             </Link>
           </Button>
-          {owner && workspace.exposureActive ? (
+          {owner && workspace.exposureActive && run.assetId ? (
+            <Button variant="secondary" asChild>
+              <Link
+                to="/w/$slug/assets/$assetId"
+                params={{ slug, assetId: run.assetId }}
+              >
+                Run again
+              </Link>
+            </Button>
+          ) : owner && workspace.exposureActive ? (
             <Button variant="secondary" asChild>
               <Link to="/w/$slug/exposure/new" params={{ slug }}>
                 Run again

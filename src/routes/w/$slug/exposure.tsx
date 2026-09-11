@@ -3,8 +3,9 @@ import { ChangeDigestLines } from "@/components/change-digest";
 import { EmptyExposure } from "@/components/empty-exposure";
 import { SummaryCounts } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { digestRunChange } from "@/lib/diff";
+import { digestRunChange, previousRunFor } from "@/lib/diff";
 import { formatDate, summarize } from "@/lib/format";
+import { runbookLabelFromRun } from "@/lib/runbooks";
 import { isOwner, useMembership, useWorkspace, useWorkspaceRuns } from "@/lib/store";
 
 export const Route = createFileRoute("/w/$slug/exposure")({
@@ -31,21 +32,32 @@ function ExposureHistoryPage() {
           <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
           <h1 className="mt-2 text-3xl font-medium tracking-tight">Run history</h1>
         </div>
-        {owner && workspace.exposureActive ? (
-          <Button asChild variant="secondary" size="sm">
-            <Link to="/w/$slug/exposure/new" params={{ slug }}>
-              Run again
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/w/$slug/runbooks" params={{ slug }}>
+              Runbooks
             </Link>
           </Button>
-        ) : null}
+          {owner && workspace.exposureActive ? (
+            <Button asChild variant="secondary" size="sm">
+              <Link to="/w/$slug/assets" params={{ slug }}>
+                Run again
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Completed runs are immutable snapshots. A difference between runs may
-        be a change on the hostname, or a change in the check profile.
+        Completed runs are immutable snapshots. Environment change is what
+        changed on the asset. Coverage change is what the runbook checked.
+      </p>
+      <p className="mt-2 text-xs text-fg-subtle">
+        Coverage improves. History stays comparable. New checks can be added to
+        future runs without changing previous evidence.
       </p>
       <ol className="mt-8 grid gap-3">
         {runs.map((run, index) => {
-          const previous = runs[index + 1];
+          const previous = previousRunFor(run, runs);
           const summary = summarize(run.observations);
           const digest = digestRunChange(run, previous);
           const number = /(?:^run-|-)(\d+)$/.exec(run.id)?.[1] ?? String(runs.length - index);
@@ -69,17 +81,14 @@ function ExposureHistoryPage() {
                       {formatDate(run.observedAt)}
                     </h2>
                     <p className="mt-1 font-mono text-xs text-fg-subtle">
-                      {run.checkIds.length} checks · {run.checkset} · {run.initiator}
+                      {run.domain} · {runbookLabelFromRun(run)} · {run.initiator}
                     </p>
                   </div>
                   <SummaryCounts summary={summary} compact />
                 </div>
                 {previous ? (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-fg">Since previous run</p>
-                    <div className="mt-2">
-                      <ChangeDigestLines digest={digest} />
-                    </div>
+                    <ChangeDigestLines digest={digest} />
                   </div>
                 ) : null}
               </Link>

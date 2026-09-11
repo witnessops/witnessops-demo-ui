@@ -1,3 +1,4 @@
+import { parsePortCheckId } from "./ports";
 import type { DiffLabel, ExposureRun } from "./types";
 
 export interface RunDiff {
@@ -7,6 +8,7 @@ export interface RunDiff {
   label: DiffLabel;
   from?: string;
   to?: string;
+  kind: "environment" | "coverage";
 }
 
 export interface ChangeDigest {
@@ -16,6 +18,37 @@ export interface ChangeDigest {
   unchanged: number;
   methodChanged: boolean;
   totalMaterial: number;
+  envChanged: number;
+  checksAdded: number;
+  checksRetired: number;
+  runbookChanged: boolean;
+  fromVersion?: string;
+  toVersion?: string;
+  fromRunbook?: string;
+  toRunbook?: string;
+}
+
+function coverageKey(run: ExposureRun) {
+  const ports = (run.ports ?? [])
+    .slice()
+    .sort((a, b) => a - b)
+    .join(",");
+  return `${run.runbookName ?? run.checkset}|${run.runbookVersion ?? run.checksetVersion}|${run.checkIds.slice().sort().join(",")}|${ports}`;
+}
+
+function isCoverageRow(current: ExposureRun, previous: ExposureRun, row: RunDiff) {
+  const id = row.observationId;
+  if (!id) return false;
+  const port = parsePortCheckId(id);
+  if (row.label === "new_check") {
+    if (port !== null) return !(previous.ports ?? []).includes(port);
+    return !previous.checkIds.includes(id);
+  }
+  if (row.label === "no_longer_checked") {
+    if (port !== null) return !(current.ports ?? []).includes(port);
+    return !current.checkIds.includes(id);
+  }
+  return false;
 }
 
 export function diffRuns(
@@ -29,6 +62,7 @@ export function diffRuns(
       category: obs.category,
       label: "new_check" as const,
       to: obs.status,
+      kind: "coverage" as const,
     }));
   }
 
@@ -39,13 +73,16 @@ export function diffRuns(
   for (const obs of current.observations) {
     const prior = previousById.get(obs.id);
     if (!prior) {
-      rows.push({
+      const row: RunDiff = {
         observationId: obs.id,
         name: obs.name,
         category: obs.category,
         label: "new_check",
         to: obs.status,
-      });
+        kind: "coverage",
+      };
+      row.kind = isCoverageRow(current, previous, row) ? "coverage" : "environment";
+      rows.push(row);
       continue;
     }
     if (prior.status !== obs.status) {
@@ -56,6 +93,7 @@ export function diffRuns(
         label: "changed",
         from: prior.status,
         to: obs.status,
+        kind: "environment",
       });
     } else {
       rows.push({
@@ -65,19 +103,23 @@ export function diffRuns(
         label: "unchanged",
         from: prior.status,
         to: obs.status,
+        kind: "environment",
       });
     }
   }
 
   for (const obs of previous.observations) {
     if (!currentIds.has(obs.id)) {
-      rows.push({
+      const row: RunDiff = {
         observationId: obs.id,
         name: obs.name,
         category: obs.category,
         label: "no_longer_checked",
         from: obs.status,
-      });
+        kind: "coverage",
+      };
+      row.kind = isCoverageRow(current, previous, row) ? "coverage" : "environment";
+      rows.push(row);
     }
   }
 
@@ -89,10 +131,7 @@ export function checksetChanged(
   previous: ExposureRun | undefined,
 ) {
   if (!previous) return false;
-  return (
-    current.checksetVersion !== previous.checksetVersion ||
-    current.checkset !== previous.checkset
-  );
+  return coverageKey(current) !== coverageKey(previous);
 }
 
 export function digestRunChange(
@@ -104,12 +143,25 @@ export function digestRunChange(
   let resolvedAttention = 0;
   let newAttention = 0;
   let unchanged = 0;
+  let envChanged = 0;
+  let checksAdded = 0;
+  let checksRetired = 0;
 
   for (const row of diffs) {
     if (row.label === "unchanged") {
       unchanged += 1;
       continue;
     }
+    if (row.kind === "coverage" && row.label === "new_check") {
+      checksAdded += 1;
+      if (row.to === "needs_attention") newAttention += 1;
+      continue;
+    }
+    if (row.kind === "coverage" && row.label === "no_longer_checked") {
+      checksRetired += 1;
+      continue;
+    }
+    envChanged += 1;
     if (row.label === "new_check") {
       newObservations += 1;
       if (row.to === "needs_attention") newAttention += 1;
@@ -129,6 +181,14 @@ export function digestRunChange(
     }
   }
 
+  const runbookChanged = Boolean(
+    previous &&
+      ((current.runbookName ?? current.checkset) !==
+        (previous.runbookName ?? previous.checkset) ||
+        (current.runbookVersion ?? current.checksetVersion) !==
+          (previous.runbookVersion ?? previous.checksetVersion)),
+  );
+
   return {
     newObservations,
     resolvedAttention,
@@ -136,5 +196,22 @@ export function digestRunChange(
     unchanged,
     methodChanged: checksetChanged(current, previous),
     totalMaterial: diffs.filter((row) => row.label !== "unchanged").length,
+    envChanged,
+    checksAdded,
+    checksRetired,
+    runbookChanged,
+    fromVersion: previous?.runbookVersion ?? previous?.checksetVersion,
+    toVersion: current.runbookVersion ?? current.checksetVersion,
+    fromRunbook: previous?.runbookName ?? previous?.checkset,
+    toRunbook: current.runbookName ?? current.checkset,
   };
+}
+
+export function previousRunFor(run: ExposureRun, runs: ExposureRun[]) {
+  const same = runs.filter((item) =>
+    run.assetId ? item.assetId === run.assetId : item.domain === run.domain,
+  );
+  const index = same.findIndex((item) => item.id === run.id);
+  if (index >= 0) return same[index + 1];
+  return same.find((item) => item.id !== run.id && item.observedAt < run.observedAt);
 }

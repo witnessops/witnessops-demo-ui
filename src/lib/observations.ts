@@ -1,4 +1,6 @@
-import { PUBLIC_CHECK_IDS } from "./checks";
+import { CHECK_CATALOG, PUBLIC_CHECK_IDS } from "./checks";
+import { portCheckId, portDef } from "./ports";
+import { formatDateTime } from "./format";
 import type { Observation, ObservationStatus } from "./types";
 
 type Variant = "latest" | "mid" | "early";
@@ -549,6 +551,164 @@ const SPECS: Spec[] = [
       },
     },
   },
+  {
+    id: "http",
+    category: "Web presence",
+    name: "HTTP response",
+    method: "Unauthenticated HTTPS GET of the public response",
+    checked:
+      "Whether {domain} returns a public HTTP or HTTPS response without authentication.",
+    whyItMatters:
+      "A public response is the baseline that later header, TLS and content observations refer to. It is not a statement about application security.",
+    remainsUnknown:
+      "A successful response does not establish that every path behaves the same way, or that the origin is the intended system behind a CDN.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "HTTPS on {domain} returned a public 200 response.",
+        observed:
+          "GET https://{domain}/ returned HTTP 200. HTTP on port 80 redirected to HTTPS.",
+        evidence: [
+          { label: "Request", value: "GET https://{domain}/" },
+          { label: "Status", value: "200" },
+          { label: "HTTP", value: "Redirected to HTTPS" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "HTTPS on {domain} returned a public 200 response.",
+        observed: "GET https://{domain}/ returned HTTP 200.",
+        evidence: [
+          { label: "Request", value: "GET https://{domain}/" },
+          { label: "Status", value: "200" },
+        ],
+      },
+      early: {
+        status: "clear",
+        summary: "HTTPS on {domain} returned a public 200 response.",
+        observed: "GET https://{domain}/ returned HTTP 200.",
+        evidence: [
+          { label: "Request", value: "GET https://{domain}/" },
+          { label: "Status", value: "200" },
+        ],
+      },
+    },
+  },
+  {
+    id: "mx",
+    category: "Email",
+    name: "MX",
+    method: "Unauthenticated DNS query for MX",
+    checked: "Whether public DNS publishes MX records for {domain}.",
+    whyItMatters:
+      "MX records are the public instruction for where mail for the domain should be delivered.",
+    remainsUnknown:
+      "Published MX records do not establish that the mail host accepts mail for every address, or that it is the intended operator.",
+    variants: {
+      latest: {
+        status: "clear",
+        summary: "MX for {domain} points at mail.{domain}.",
+        observed:
+          "An MX record was published for {domain} with preference 10, pointing at mail.{domain}.",
+        evidence: [
+          { label: "Name", value: "{domain}" },
+          { label: "MX", value: "10 mail.{domain}" },
+        ],
+      },
+      mid: {
+        status: "clear",
+        summary: "MX for {domain} points at mail.{domain}.",
+        observed: "An MX record was published for {domain}.",
+        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
+      },
+      early: {
+        status: "clear",
+        summary: "MX for {domain} points at mail.{domain}.",
+        observed: "An MX record was published for {domain}.",
+        evidence: [{ label: "MX", value: "10 mail.{domain}" }],
+      },
+    },
+  },
+  {
+    id: "mailhost",
+    category: "Email",
+    name: "Mail host exposure",
+    method: "Bounded TCP connection attempt to the published mail host",
+    checked:
+      "Whether the published mail host for {domain} responded on a common mail port from the observation point.",
+    whyItMatters:
+      "A reachable mail service is an expected public surface for a mail hostname. Reachability is not a finding of weakness.",
+    remainsUnknown:
+      "This does not establish mail server configuration, authentication quality, or whether the host accepts mail for the domain.",
+    variants: {
+      latest: {
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed:
+          "mail.{domain} accepted a TCP connection on port 25 and returned a short SMTP banner. This is a public reachability observation, not a test of mail security.",
+        evidence: [
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
+          { label: "Protocol", value: "TCP" },
+          { label: "Banner", value: "220 mail.{domain} ESMTP" },
+        ],
+      },
+      mid: {
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed: "mail.{domain} accepted a TCP connection on port 25.",
+        evidence: [
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
+        ],
+      },
+      early: {
+        status: "informational",
+        summary: "The published mail host responded on 25/tcp.",
+        observed: "mail.{domain} accepted a TCP connection on port 25.",
+        evidence: [
+          { label: "Target", value: "mail.{domain}" },
+          { label: "Port", value: "25" },
+        ],
+      },
+    },
+  },
+  {
+    id: "banner",
+    category: "Public exposure",
+    name: "Public banners",
+    method: "Read of a short identifying banner from an observed service",
+    checked:
+      "Whether an observed service on {domain} returned a short identifying banner during a bounded connection.",
+    whyItMatters:
+      "A public banner is a hint about the software presenting the service. It is not, by itself, a vulnerability.",
+    remainsUnknown:
+      "A banner does not establish the true software version, patch level, or whether the service is authorized.",
+    variants: {
+      latest: {
+        status: "informational",
+        summary: "An observed service returned a short identifying banner.",
+        observed:
+          "A bounded connection to an observed service on {domain} returned a short banner naming a common server product. This is a public signal, not a finding of weakness.",
+        evidence: [
+          { label: "Target", value: "{domain}" },
+          { label: "Banner", value: "nginx" },
+        ],
+      },
+      mid: {
+        status: "informational",
+        summary: "An observed service returned a short identifying banner.",
+        observed: "A bounded connection returned a short server banner.",
+        evidence: [{ label: "Banner", value: "nginx" }],
+      },
+      early: {
+        status: "informational",
+        summary: "An observed service returned a short identifying banner.",
+        observed: "A bounded connection returned a short server banner.",
+        evidence: [{ label: "Banner", value: "nginx" }],
+      },
+    },
+  },
 ];
 
 export function buildObservations(
@@ -647,7 +807,227 @@ function applyDomainOverrides(domain: string, observations: Observation[]) {
       return obs;
     });
   }
+  if (host === "203.0.113.24") {
+    return observations.map((obs) => {
+      if (obs.id === "tls") {
+        return {
+          ...obs,
+          status: "clear" as const,
+          summary: "A valid certificate was presented for this address.",
+          observed:
+            "A valid publicly trusted certificate was presented during the TLS handshake on port 443. The certificate name did not match a hostname on this address.",
+          evidence: [
+            { label: "Observed address", value: host },
+            { label: "Certificate subject", value: "CN=api.acme.com" },
+            { label: "Issuer", value: "Let's Encrypt" },
+            { label: "Protocol", value: "TLS 1.3" },
+          ],
+        };
+      }
+      if (obs.id === "headers") {
+        return {
+          ...obs,
+          status: "informational" as const,
+          summary: "HTTPS on this address returned a public response without HSTS.",
+          observed: `GET https://${host}/ returned 200. Strict-Transport-Security was not present.`,
+          evidence: [
+            { label: "Request", value: `GET https://${host}/` },
+            { label: "Status", value: "200" },
+            { label: "Strict-Transport-Security", value: "Not present" },
+          ],
+        };
+      }
+      if (obs.id === "banner") {
+        return {
+          ...obs,
+          status: "informational" as const,
+          summary: "SSH on port 22 returned a short identifying banner.",
+          observed:
+            "A bounded connection to port 22 returned SSH-2.0-OpenSSH. A banner is a public signal, not a finding of weakness.",
+          evidence: [
+            { label: "Target", value: host },
+            { label: "Port", value: "22" },
+            { label: "Banner", value: "SSH-2.0-OpenSSH" },
+          ],
+        };
+      }
+      return obs;
+    });
+  }
+  if (host === "api.acme.com") {
+    return observations.map((obs) => {
+      if (obs.id === "headers") {
+        return {
+          ...obs,
+          status: "needs_attention" as const,
+          summary: "HSTS was not present on the API HTTPS response.",
+          observed: `The HTTPS response for ${host} did not include Strict-Transport-Security. Content-Security-Policy was also absent.`,
+          evidence: [
+            { label: "Request", value: `GET https://${host}/` },
+            { label: "Status", value: "200" },
+            { label: "Strict-Transport-Security", value: "Not present" },
+            { label: "Content-Security-Policy", value: "Not present" },
+          ],
+        };
+      }
+      if (obs.id === "tech") {
+        return {
+          ...obs,
+          status: "informational" as const,
+          summary: "Public responses named an API gateway and a JSON content type.",
+          observed: `Responses from ${host} included a gateway header and application/json. This is a public signal, not a finding of weakness.`,
+          evidence: [
+            { label: "Content-Type", value: "application/json" },
+            { label: "Server header", value: "cloudflare" },
+          ],
+        };
+      }
+      if (obs.id === "securitytxt") {
+        return {
+          ...obs,
+          status: "needs_attention" as const,
+          summary: "No security.txt was retrieved at the well-known path.",
+          observed: `GET https://${host}/.well-known/security.txt returned 404.`,
+          evidence: [
+            { label: "Path", value: "/.well-known/security.txt" },
+            { label: "Status", value: "404" },
+          ],
+        };
+      }
+      if (obs.id === "http") {
+        return {
+          ...obs,
+          status: "clear" as const,
+          summary: `HTTPS on ${host} returned a public 200 response.`,
+          observed: `GET https://${host}/health returned HTTP 200.`,
+          evidence: [
+            { label: "Request", value: `GET https://${host}/health` },
+            { label: "Status", value: "200" },
+          ],
+        };
+      }
+      return obs;
+    });
+  }
+  if (host === "mail.acme.com" || host === "acme.com") {
+    return observations.map((obs) => {
+      if (host === "mail.acme.com" && obs.id === "headers") {
+        return {
+          ...obs,
+          status: "informational" as const,
+          summary: "The mail hostname did not return a web application on HTTPS.",
+          observed: `HTTPS on ${host} returned 404. This hostname appears to be used for mail, not a public website.`,
+          evidence: [
+            { label: "Request", value: `GET https://${host}/` },
+            { label: "Status", value: "404" },
+          ],
+        };
+      }
+      return obs;
+    });
+  }
   return observations;
+}
+
+function defaultPortState(
+  target: string,
+  port: number,
+  variant: Variant,
+): { observed: boolean; attention: boolean; banner?: string } {
+  const host = target.toLowerCase();
+  if (host === "203.0.113.24") {
+    if (port === 22) return { observed: true, attention: true, banner: "SSH-2.0-OpenSSH" };
+    if (port === 80) return { observed: true, attention: false };
+    if (port === 443) return { observed: true, attention: false };
+    return { observed: false, attention: false };
+  }
+  if (host.startsWith("mail.")) {
+    if (port === 25) return { observed: true, attention: false, banner: `220 ${host} ESMTP` };
+    if (port === 443) return { observed: true, attention: false };
+    return { observed: false, attention: false };
+  }
+  if (variant === "early" && port === 8080) {
+    return { observed: true, attention: true };
+  }
+  if (port === 80 || port === 443) return { observed: true, attention: false };
+  return { observed: false, attention: false };
+}
+
+export function buildPortObservations(
+  target: string,
+  ports: number[],
+  observedAt: string,
+  variant: Variant = "latest",
+): Observation[] {
+  return ports.map((port) => {
+    const def = portDef(port);
+    const state = defaultPortState(target, port, variant);
+    const observed = state.observed;
+    const status: ObservationStatus = state.attention
+      ? "needs_attention"
+      : observed
+        ? "informational"
+        : "clear";
+    const serviceHint = def.name !== `Port ${port}` ? ` (${def.name})` : "";
+    return {
+      id: portCheckId(port),
+      category: "Public services",
+      name: `${port}/tcp`,
+      status,
+      statusLabel: state.attention ? undefined : observed ? "Observed" : "Not observed",
+      summary: observed
+        ? `A TCP service responded on port ${port}${serviceHint}.`
+        : `No TCP service responded on port ${port} from the observation point.`,
+      checked: `Whether TCP port ${port} responded to a bounded connection attempt.`,
+      observed: observed
+        ? `A TCP service responded on port ${port}.`
+        : `No TCP service responded on port ${port} from the observation point.`,
+      evidence: [
+        { label: "Target", value: target },
+        { label: "Port", value: String(port) },
+        { label: "Protocol", value: def.protocol },
+        { label: "Service name", value: def.name },
+        { label: "Result", value: observed ? "Observed" : "Not observed" },
+        ...(state.banner ? [{ label: "Banner", value: state.banner }] : []),
+        { label: "Observed at", value: formatDateTime(observedAt) },
+      ],
+      whyItMatters: observed
+        ? `${def.name} is publicly reachable from the observation point. Reachability is evidence of a public service, not a vulnerability.`
+        : "A port that did not respond in this bounded set is not a claim that the host has no other listeners.",
+      remainsUnknown:
+        "This does not establish whether authentication is weak, the service is vulnerable, or access is unauthorized.",
+      method: "TCP connection attempt",
+      observedAt,
+    };
+  });
+}
+
+export function observationsForRun(input: {
+  target: string;
+  observedAt: string;
+  checkIds: string[];
+  ports?: number[];
+  variant?: Variant;
+}) {
+  const variant = input.variant ?? "latest";
+  const checkIds = input.checkIds.filter((id) => !id.startsWith("port-"));
+  const checks = applyDomainOverrides(
+    input.target,
+    buildObservations(input.target.toLowerCase(), variant, input.observedAt, checkIds),
+  );
+  const catalogOrder = new Map(CHECK_CATALOG.map((check, index) => [check.id, index]));
+  checks.sort((a, b) => {
+    const ai = catalogOrder.get(a.id) ?? 99;
+    const bi = catalogOrder.get(b.id) ?? 99;
+    return ai - bi;
+  });
+  const ports = buildPortObservations(
+    input.target,
+    input.ports ?? [],
+    input.observedAt,
+    variant,
+  );
+  return [...checks, ...ports];
 }
 
 export function observationsForDomain(
@@ -655,8 +1035,9 @@ export function observationsForDomain(
   observedAt: string,
   checkIds: string[] = PUBLIC_CHECK_IDS,
 ) {
-  return applyDomainOverrides(
-    domain,
-    buildObservations(domain.toLowerCase(), "latest", observedAt, checkIds),
-  );
+  return observationsForRun({
+    target: domain,
+    observedAt,
+    checkIds,
+  });
 }

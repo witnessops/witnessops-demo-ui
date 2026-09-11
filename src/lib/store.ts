@@ -5,27 +5,43 @@ import {
   defaultCheckProfile,
   publicCheckset,
   subscribedCheckProfile,
-  workspaceCheckset,
 } from "./checks";
 import {
   ACME_WORKSPACE,
   FROZEN_OBSERVED_AT,
   KAROL,
   MARK_PALETTE,
+  acmeAssets,
   acmeHistoryRuns,
+  companionAssets,
   companionMembers,
+  companionRunbooks,
   companionRuns,
   companionWorkspaces,
   nextRunId,
+  primaryAsset,
+  workspaceRunbooks,
 } from "./seed";
-import { observationsForDomain } from "./observations";
+import { observationsForRun } from "./observations";
+import {
+  assetIdFor,
+  inferAssetType,
+  instantiateRunbooks,
+  normalizeAssetName,
+  runbookIdFor,
+  suggestedTemplate,
+  templateById,
+} from "./runbooks";
 import { slugify } from "./utils";
 import type {
+  Asset,
+  AssetType,
   CheckProfile,
   ExposureRun,
   Member,
   PendingSave,
   Role,
+  Runbook,
   RunningCheck,
   User,
   Workspace,
@@ -38,6 +54,8 @@ interface AppState {
   workspaces: Workspace[];
   members: Member[];
   runs: ExposureRun[];
+  assets: Asset[];
+  runbooks: Runbook[];
   lastWorkspaceSlug: string | null;
   pendingSave: PendingSave | null;
   running: RunningCheck | null;
@@ -57,11 +75,26 @@ interface AppState {
   }) => Member;
   changeRole: (memberId: string, role: Role) => void;
   removeMember: (memberId: string) => void;
+  addAsset: (input: {
+    workspaceId: string;
+    name: string;
+    type: AssetType;
+    runbookId: string;
+  }) => Asset;
+  updateAsset: (id: string, patch: Partial<Pick<Asset, "runbookId" | "name" | "type">>) => void;
+  updateRunbook: (
+    id: string,
+    patch: Partial<Pick<Runbook, "checkIds" | "ports" | "cadence" | "name">>,
+  ) => void;
+  duplicateRunbook: (id: string) => Runbook | null;
   startRun: (input: {
     domain: string;
     workspaceId: string;
     checkIds: string[];
     source?: ExposureRun["source"];
+    assetId?: string;
+    runbookId?: string;
+    ports?: number[];
   }) => RunningCheck;
   completeRun: (opts?: {
     source?: ExposureRun["source"];
@@ -83,6 +116,8 @@ const emptyState = {
   workspaces: [] as Workspace[],
   members: [] as Member[],
   runs: [] as ExposureRun[],
+  assets: [] as Asset[],
+  runbooks: [] as Runbook[],
   lastWorkspaceSlug: null as string | null,
   pendingSave: null as PendingSave | null,
   running: null as RunningCheck | null,
@@ -109,6 +144,24 @@ function displayNameFromEmail(email: string) {
     .join(" ");
 }
 
+function ensureCatalog(
+  workspace: Workspace,
+  runbooks: Runbook[],
+  assets: Asset[],
+) {
+  let nextRunbooks = runbooks;
+  let nextAssets = assets;
+  const existing = runbooks.filter((item) => item.workspaceId === workspace.id);
+  if (existing.length === 0) {
+    nextRunbooks = [...runbooks, ...instantiateRunbooks(workspace.id, workspace.createdAt)];
+  }
+  const hasAsset = nextAssets.some((item) => item.workspaceId === workspace.id);
+  if (!hasAsset && workspace.primaryDomain) {
+    nextAssets = [...nextAssets, primaryAsset(workspace)];
+  }
+  return { runbooks: nextRunbooks, assets: nextAssets };
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -127,15 +180,12 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const slug = uniqueSlug(name, state.workspaces);
         const alreadyActive = state.workspaces.some((ws) => ws.exposureActive);
+        const host = normalizeAssetName(domain);
         const workspace: Workspace = {
           id: `ws-${slug}`,
           slug,
           name: name.trim() || "Workspace",
-          primaryDomain: domain
-            .trim()
-            .toLowerCase()
-            .replace(/^https?:\/\//, "")
-            .replace(/\/.*$/, ""),
+          primaryDomain: host,
           createdAt: new Date().toISOString(),
           mark: MARK_PALETTE[state.workspaces.length % MARK_PALETTE.length] ?? "#c8b896",
           exposureActive: alreadyActive,
@@ -154,17 +204,49 @@ export const useAppStore = create<AppState>()(
         let workspaces = [...state.workspaces, workspace];
         let members = [...state.members, owner];
         let runs = state.runs;
+        let assets = state.assets;
+        let runbooks = state.runbooks;
         let companionsSeeded = state.companionsSeeded;
+        const createdAt = workspace.createdAt;
+        runbooks = [...runbooks, ...instantiateRunbooks(workspace.id, createdAt)];
+        if (host) {
+          const type = inferAssetType(host);
+          const template = suggestedTemplate(type);
+          assets = [
+            ...assets,
+            {
+              id: assetIdFor(workspace.id, host),
+              workspaceId: workspace.id,
+              name: host,
+              type,
+              runbookId: runbookIdFor(workspace.id, template.templateId),
+              createdAt,
+            },
+          ];
+        }
+        if (slug === "acme") {
+          workspace.exposureActive = true;
+          workspace.checkProfile = subscribedCheckProfile();
+          assets = [
+            ...assets.filter((item) => item.workspaceId !== workspace.id),
+            ...acmeAssets(),
+          ];
+          runs = [...runs, ...acmeHistoryRuns(workspace.id)];
+        }
         if (!companionsSeeded) {
           workspaces = [...workspaces, ...companionWorkspaces()];
           members = [...members, ...companionMembers(state.user ?? KAROL)];
           runs = [...runs, ...companionRuns()];
+          assets = [...assets, ...companionAssets()];
+          runbooks = [...runbooks, ...companionRunbooks()];
           companionsSeeded = true;
         }
         set({
           workspaces,
           members,
           runs,
+          assets,
+          runbooks,
           companionsSeeded,
           lastWorkspaceSlug: workspace.slug,
         });
@@ -197,20 +279,76 @@ export const useAppStore = create<AppState>()(
       removeMember: (memberId) => {
         set({ members: get().members.filter((member) => member.id !== memberId) });
       },
-      startRun: ({ domain, workspaceId, checkIds, source }) => {
+      addAsset: ({ workspaceId, name, type, runbookId }) => {
+        const host = normalizeAssetName(name);
+        const id = assetIdFor(workspaceId, host);
+        const existing = get().assets.find((item) => item.id === id);
+        if (existing) return existing;
+        const asset: Asset = {
+          id,
+          workspaceId,
+          name: host,
+          type,
+          runbookId,
+          createdAt: new Date().toISOString(),
+        };
+        set({ assets: [...get().assets, asset] });
+        const workspace = get().workspaces.find((ws) => ws.id === workspaceId);
+        if (workspace && !workspace.primaryDomain) {
+          set({
+            workspaces: get().workspaces.map((ws) =>
+              ws.id === workspaceId ? { ...ws, primaryDomain: host } : ws,
+            ),
+          });
+        }
+        return asset;
+      },
+      updateAsset: (id, patch) => {
+        set({
+          assets: get().assets.map((asset) =>
+            asset.id === id ? { ...asset, ...patch } : asset,
+          ),
+        });
+      },
+      updateRunbook: (id, patch) => {
+        set({
+          runbooks: get().runbooks.map((runbook) =>
+            runbook.id === id
+              ? { ...runbook, ...patch, updatedAt: new Date().toISOString() }
+              : runbook,
+          ),
+        });
+      },
+      duplicateRunbook: (id) => {
+        const source = get().runbooks.find((item) => item.id === id);
+        if (!source) return null;
+        const copy: Runbook = {
+          ...source,
+          id: `${source.id}-copy-${Math.random().toString(36).slice(2, 6)}`,
+          name: `${source.name} (copy)`,
+          updatedAt: new Date().toISOString(),
+        };
+        set({ runbooks: [...get().runbooks, copy] });
+        return copy;
+      },
+      startRun: ({ domain, workspaceId, checkIds, source, assetId, runbookId, ports }) => {
         const existing = get().runs.filter((run) => run.workspaceId === workspaceId);
+        const host = normalizeAssetName(domain);
         const observedAt =
-          domain.toLowerCase() === "acme.com"
+          host === "acme.com" || host === "api.acme.com" || host === "203.0.113.24"
             ? new Date(
                 Date.parse(FROZEN_OBSERVED_AT) + existing.length * 60 * 60 * 1000,
               ).toISOString()
             : new Date().toISOString();
         const running: RunningCheck = {
-          domain,
+          domain: host,
           workspaceId,
           observedAt,
           checkIds,
           source,
+          assetId,
+          runbookId,
+          ports,
         };
         set({ running });
         return running;
@@ -226,12 +364,23 @@ export const useAppStore = create<AppState>()(
         const workspaceRuns = state.runs.filter(
           (run) => run.workspaceId === running.workspaceId,
         );
+        const runbook = state.runbooks.find((item) => item.id === running.runbookId);
         const checkIds = running.checkIds;
         const source = opts?.source ?? running.source ?? "workspace";
         const meta =
           source === "public" || !workspace?.exposureActive
             ? publicCheckset()
-            : workspaceCheckset(checkIds);
+            : runbook
+              ? {
+                  checkset: runbook.name,
+                  checksetVersion: runbook.version,
+                  checkIds,
+                }
+              : {
+                  checkset: "Workspace profile",
+                  checksetVersion: `${checkIds.length}-checks`,
+                  checkIds,
+                };
         const run: ExposureRun = {
           id: nextRunId(workspaceRuns),
           workspaceId: running.workspaceId,
@@ -242,11 +391,18 @@ export const useAppStore = create<AppState>()(
           initiator: opts?.initiator ?? state.user?.name ?? "Karol",
           status: "completed",
           source,
-          observations: observationsForDomain(
-            running.domain,
-            running.observedAt,
+          assetId: running.assetId,
+          runbookId: running.runbookId,
+          runbookName: runbook?.name ?? meta.checkset,
+          runbookVersion: runbook?.version ?? meta.checksetVersion,
+          ports: running.ports ?? runbook?.ports,
+          kind: runbook?.kind,
+          observations: observationsForRun({
+            target: running.domain,
+            observedAt: running.observedAt,
             checkIds,
-          ),
+            ports: running.ports ?? runbook?.ports,
+          }),
         };
         set({ runs: [run, ...state.runs], running: null });
         return run;
@@ -256,6 +412,38 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const pending = state.pendingSave;
         if (!pending) return null;
+        const workspace = state.workspaces.find((ws) => ws.id === workspaceId);
+        const catalog = workspace
+          ? ensureCatalog(workspace, state.runbooks, state.assets)
+          : { runbooks: state.runbooks, assets: state.assets };
+        let assets = catalog.assets;
+        let runbooks = catalog.runbooks;
+        const host = pending.domain;
+        const type = inferAssetType(host);
+        const template = suggestedTemplate(type);
+        const desiredRunbookId = runbookIdFor(workspaceId, template.templateId);
+        if (!runbooks.some((item) => item.id === desiredRunbookId)) {
+          runbooks = [
+            ...runbooks,
+            ...instantiateRunbooks(workspaceId, new Date().toISOString()).filter(
+              (item) => !runbooks.some((existing) => existing.id === item.id),
+            ),
+          ];
+        }
+        let asset = assets.find(
+          (item) => item.workspaceId === workspaceId && item.name === host,
+        );
+        if (!asset) {
+          asset = {
+            id: assetIdFor(workspaceId, host),
+            workspaceId,
+            name: host,
+            type,
+            runbookId: desiredRunbookId,
+            createdAt: new Date().toISOString(),
+          };
+          assets = [...assets, asset];
+        }
         const workspaceRuns = state.runs.filter((run) => run.workspaceId === workspaceId);
         const existing = workspaceRuns.find(
           (run) =>
@@ -265,7 +453,12 @@ export const useAppStore = create<AppState>()(
           state.workspaces.find((ws) => ws.id === workspaceId)?.slug ??
           state.lastWorkspaceSlug;
         if (existing) {
-          set({ pendingSave: null, lastWorkspaceSlug: slug });
+          set({
+            pendingSave: null,
+            lastWorkspaceSlug: slug,
+            assets,
+            runbooks,
+          });
           return existing;
         }
         const run: ExposureRun = {
@@ -281,11 +474,16 @@ export const useAppStore = create<AppState>()(
           status: "completed",
           source: "public",
           observations: pending.observations,
+          assetId: asset.id,
+          runbookName: pending.checkset,
+          runbookVersion: pending.checksetVersion,
         };
         set({
           runs: [run, ...state.runs],
           pendingSave: null,
           lastWorkspaceSlug: slug,
+          assets,
+          runbooks,
         });
         return run;
       },
@@ -297,8 +495,13 @@ export const useAppStore = create<AppState>()(
         });
       },
       activateExposure: (workspaceId) => {
+        const state = get();
+        const workspace = state.workspaces.find((ws) => ws.id === workspaceId);
+        if (!workspace) return;
+        const catalog = ensureCatalog(workspace, state.runbooks, state.assets);
+        const webTemplate = templateById("web")!;
         set({
-          workspaces: get().workspaces.map((ws) =>
+          workspaces: state.workspaces.map((ws) =>
             ws.id === workspaceId
               ? {
                   ...ws,
@@ -307,6 +510,17 @@ export const useAppStore = create<AppState>()(
                 }
               : ws,
           ),
+          runbooks: catalog.runbooks.map((runbook) =>
+            runbook.workspaceId === workspaceId && runbook.templateId === "web"
+              ? {
+                  ...runbook,
+                  checkIds: [...webTemplate.checkIds],
+                  version: webTemplate.version,
+                  cadence: webTemplate.cadence,
+                }
+              : runbook,
+          ),
+          assets: catalog.assets,
         });
       },
       updateCheckProfile: (workspaceId, patch) => {
@@ -317,10 +531,24 @@ export const useAppStore = create<AppState>()(
               : ws,
           ),
         });
+        if (patch.checkIds) {
+          const webId = runbookIdFor(workspaceId, "web");
+          set({
+            runbooks: get().runbooks.map((runbook) =>
+              runbook.id === webId
+                ? {
+                    ...runbook,
+                    checkIds: patch.checkIds!,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : runbook,
+            ),
+          });
+        }
       },
     }),
     {
-      name: "witnessops-prototype-v2",
+      name: "witnessops-prototype-v3",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({
@@ -329,6 +557,8 @@ export const useAppStore = create<AppState>()(
         workspaces: state.workspaces,
         members: state.members,
         runs: state.runs,
+        assets: state.assets,
+        runbooks: state.runbooks,
         lastWorkspaceSlug: state.lastWorkspaceSlug,
         pendingSave: state.pendingSave,
         companionsSeeded: state.companionsSeeded,
@@ -363,6 +593,34 @@ export function useWorkspaceRuns(workspaceId: string | undefined) {
   );
 }
 
+export function useWorkspaceAssets(workspaceId: string | undefined) {
+  const assets = useAppStore((state) => state.assets);
+  return useMemo(
+    () => assets.filter((asset) => asset.workspaceId === workspaceId),
+    [assets, workspaceId],
+  );
+}
+
+export function useWorkspaceRunbooks(workspaceId: string | undefined) {
+  const runbooks = useAppStore((state) => state.runbooks);
+  return useMemo(
+    () => runbooks.filter((runbook) => runbook.workspaceId === workspaceId),
+    [runbooks, workspaceId],
+  );
+}
+
+export function useAssetRuns(assetId: string | undefined) {
+  const runs = useAppStore((state) => state.runs);
+  return useMemo(
+    () =>
+      runs
+        .filter((run) => run.assetId === assetId)
+        .slice()
+        .sort((a, b) => (a.observedAt < b.observedAt ? 1 : -1)),
+    [runs, assetId],
+  );
+}
+
 export function isOwner(role: Role | undefined) {
   return role === "owner";
 }
@@ -392,6 +650,8 @@ export function seedPopulatedAcme(user: User = KAROL) {
     workspaces: [ACME_WORKSPACE, ...companionWorkspaces()],
     members,
     runs: [...acmeHistoryRuns(ACME_WORKSPACE.id), ...companionRuns()],
+    assets: [...acmeAssets(), ...companionAssets()],
+    runbooks: [...workspaceRunbooks(ACME_WORKSPACE), ...companionRunbooks()],
     lastWorkspaceSlug: ACME_WORKSPACE.slug,
     companionsSeeded: true,
   };

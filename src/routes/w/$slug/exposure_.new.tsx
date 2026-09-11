@@ -1,31 +1,24 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { CheckPicker } from "@/components/check-picker";
+import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { RunningCheck } from "@/components/running-check";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  cadenceLabel,
-  profileCountLabel,
-  type Cadence,
-} from "@/lib/checks";
+import { runbookLabel } from "@/lib/runbooks";
 import {
   isOwner,
   useAppStore,
   useMembership,
   useWorkspace,
+  useWorkspaceAssets,
+  useWorkspaceRunbooks,
 } from "@/lib/store";
 
 type Search = {
-  edit?: boolean;
+  asset?: string;
 };
 
 export const Route = createFileRoute("/w/$slug/exposure_/new")({
   validateSearch: (search: Record<string, unknown>): Search => {
-    if (search.edit === true || search.edit === "1" || search.edit === "true") {
-      return { edit: true };
+    if (typeof search.asset === "string" && search.asset.length > 0) {
+      return { asset: search.asset };
     }
     return {};
   },
@@ -34,35 +27,18 @@ export const Route = createFileRoute("/w/$slug/exposure_/new")({
 
 function NewExposurePage() {
   const { slug } = Route.useParams();
-  const { edit } = Route.useSearch();
+  const { asset: assetId } = Route.useSearch();
   const navigate = useNavigate();
   const workspace = useWorkspace(slug);
   const membership = useMembership(workspace?.id);
   const owner = isOwner(membership?.role);
+  const assets = useWorkspaceAssets(workspace?.id);
+  const runbooks = useWorkspaceRunbooks(workspace?.id);
   const startRun = useAppStore((state) => state.startRun);
   const completeRun = useAppStore((state) => state.completeRun);
-  const updateCheckProfile = useAppStore((state) => state.updateCheckProfile);
-  const updateWorkspace = useAppStore((state) => state.updateWorkspace);
   const running = useAppStore((state) => state.running);
-  const [editing, setEditing] = useState(Boolean(edit));
-  const [domain, setDomain] = useState(workspace?.primaryDomain ?? "");
-  const [selected, setSelected] = useState<string[]>(
-    workspace?.checkProfile.checkIds ?? [],
-  );
-  const [cadence, setCadence] = useState<Cadence>(
-    workspace?.checkProfile.cadence ?? "manual",
-  );
-
-  useEffect(() => {
-    if (!workspace) return;
-    setDomain(workspace.primaryDomain);
-    setSelected(workspace.checkProfile.checkIds);
-    setCadence(workspace.checkProfile.cadence);
-  }, [workspace?.id]);
-
-  useEffect(() => {
-    if (edit) setEditing(true);
-  }, [edit]);
+  const asset = assets.find((item) => item.id === assetId) ?? assets[0];
+  const runbook = runbooks.find((item) => item.id === asset?.runbookId);
 
   if (!workspace) return null;
 
@@ -71,6 +47,7 @@ function NewExposurePage() {
       <RunningCheck
         domain={running.domain}
         checkIds={running.checkIds}
+        ports={running.ports}
         onDone={() => {
           const run = completeRun();
           if (run) {
@@ -90,10 +67,6 @@ function NewExposurePage() {
         <h1 className="text-2xl font-medium tracking-tight">
           Activate External Exposure to choose checks.
         </h1>
-        <p className="mt-3 text-sm text-fg-muted">
-          Check selection is part of the workspace product. Your saved snapshot
-          stays as it is.
-        </p>
         <Button asChild className="mt-8">
           <Link to="/w/$slug" params={{ slug }}>
             Back to workspace
@@ -118,130 +91,64 @@ function NewExposurePage() {
     );
   }
 
-  const ws = workspace;
-
-  function persistProfile(nextIds = selected, nextCadence = cadence) {
-    updateCheckProfile(ws.id, {
-      checkIds: nextIds,
-      cadence: nextCadence,
-    });
-  }
-
-  function run() {
-    const host = domain
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, "")
-      .replace(/\/.*$/, "");
-    if (!host || selected.length === 0) return;
-    persistProfile();
-    if (host !== ws.primaryDomain) {
-      updateWorkspace(ws.id, { primaryDomain: host });
-    }
-    startRun({
-      domain: host,
-      workspaceId: ws.id,
-      checkIds: selected,
-      source: "workspace",
-    });
+  if (!asset) {
+    return <Navigate to="/w/$slug/assets/new" params={{ slug }} />;
   }
 
   return (
     <div className="mx-auto max-w-2xl">
       <p className="font-mono text-xs text-fg-subtle">External Exposure</p>
-      <h1 className="mt-2 text-3xl font-medium tracking-tight">
-        {domain.trim() || "Add a domain"}
-      </h1>
+      <h1 className="mt-2 text-3xl font-medium tracking-tight">{asset.name}</h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Observe what is publicly visible about your domain and track how it
-        changes over time.
+        Run the current runbook against this tracked asset. Recommended checks
+        are already selected.
       </p>
-
-      {editing ? (
-        <div className="mt-8 grid gap-2">
-          <Label htmlFor="run-domain">Hostname</Label>
-          <Input
-            id="run-domain"
-            value={domain}
-            onChange={(event) => setDomain(event.target.value)}
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
-      ) : null}
-
       <div className="mt-6 rounded-xl border border-border bg-surface p-5">
         <p className="text-sm text-fg">
-          {profileCountLabel(selected.length)}
+          {runbook ? runbookLabel(runbook) : "No runbook"}
         </p>
         <p className="mt-1 text-xs text-fg-muted">
-          Future runs use this profile unless you change it. Repeat:{" "}
-          {cadenceLabel(cadence)}.
+          {runbook
+            ? `${runbook.checkIds.length} checks${runbook.ports.length ? ` · ${runbook.ports.length} ports` : ""}`
+            : "Assign a runbook before running."}
         </p>
-        {!editing ? (
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={run}>Run now</Button>
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-              Edit checks
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link to="/w/$slug" params={{ slug }}>
-                Cancel
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              if (!runbook) return;
+              startRun({
+                domain: asset.name,
+                workspaceId: workspace.id,
+                checkIds: runbook.checkIds,
+                source: "workspace",
+                assetId: asset.id,
+                runbookId: runbook.id,
+                ports: runbook.ports,
+              });
+            }}
+          >
+            Run observation
+          </Button>
+          {runbook ? (
+            <Button variant="secondary" asChild>
+              <Link
+                to="/w/$slug/runbooks/$runbookId"
+                params={{ slug, runbookId: runbook.id }}
+              >
+                Edit runbook
               </Link>
             </Button>
-          </div>
-        ) : null}
-      </div>
-
-      {editing ? (
-        <div className="mt-8">
-          <CheckPicker
-            selected={selected}
-            onChange={(ids) => {
-              setSelected(ids);
-              persistProfile(ids);
-            }}
-          />
-          <div className="mt-8">
-            <p className="text-xs font-medium tracking-wide text-fg-subtle uppercase">
-              Repeat
-            </p>
-            <RadioGroup
-              className="mt-3 grid gap-2 sm:grid-cols-3"
-              value={cadence}
-              onValueChange={(value) => {
-                const next = value as Cadence;
-                setCadence(next);
-                persistProfile(selected, next);
-              }}
+          ) : null}
+          <Button variant="ghost" asChild>
+            <Link
+              to="/w/$slug/assets/$assetId"
+              params={{ slug, assetId: asset.id }}
             >
-              {(["manual", "weekly", "daily"] as const).map((value) => (
-                <label
-                  key={value}
-                  className="flex h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-surface"
-                >
-                  <RadioGroupItem value={value} />
-                  {cadenceLabel(value)}
-                </label>
-              ))}
-            </RadioGroup>
-            <p className="mt-2 text-xs text-fg-subtle">
-              Scheduling is mocked in this prototype. It does not send
-              notifications.
-            </p>
-          </div>
-          <div className="mt-8 flex flex-wrap gap-2">
-            <Button onClick={run}>Run selected checks</Button>
-            <Button
-              variant="ghost"
-              onClick={() => setEditing(false)}
-            >
-              Cancel
-            </Button>
-          </div>
+              Open asset
+            </Link>
+          </Button>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

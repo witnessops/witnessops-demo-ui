@@ -30,6 +30,13 @@ export const CHECK_CATALOG: CheckDef[] = [
     core: true,
   },
   {
+    id: "http",
+    group: "web",
+    name: "HTTP response",
+    blurb: "Whether the hostname returns a public HTTP or HTTPS response.",
+    core: true,
+  },
+  {
     id: "headers",
     group: "web",
     name: "HTTP security headers",
@@ -72,6 +79,13 @@ export const CHECK_CATALOG: CheckDef[] = [
     core: false,
   },
   {
+    id: "mx",
+    group: "email",
+    name: "MX",
+    blurb: "Whether public MX records point the domain at a mail host.",
+    core: true,
+  },
+  {
     id: "spf",
     group: "email",
     name: "SPF",
@@ -93,6 +107,13 @@ export const CHECK_CATALOG: CheckDef[] = [
     core: true,
   },
   {
+    id: "mailhost",
+    group: "email",
+    name: "Mail host exposure",
+    blurb: "Whether the published mail host presents a public mail service.",
+    core: false,
+  },
+  {
     id: "services",
     group: "exposure",
     name: "Publicly observable services",
@@ -106,13 +127,29 @@ export const CHECK_CATALOG: CheckDef[] = [
     blurb: "Whether a few commonly guessed admin paths return an application.",
     core: true,
   },
+  {
+    id: "banner",
+    group: "exposure",
+    name: "Public banners",
+    blurb: "Whether a short identifying banner is returned by an observed service.",
+    core: false,
+  },
 ];
 
 export const ALL_CHECK_IDS = CHECK_CATALOG.map((check) => check.id);
 
-export const PUBLIC_CHECK_IDS = CHECK_CATALOG.filter((check) => check.core).map(
-  (check) => check.id,
-);
+export const PUBLIC_CHECK_IDS = [
+  "tls",
+  "headers",
+  "tech",
+  "securitytxt",
+  "dns",
+  "certificate",
+  "spf",
+  "dmarc",
+  "services",
+  "exposure",
+];
 
 export const OPTIONAL_CHECK_IDS = CHECK_CATALOG.filter((check) => !check.core).map(
   (check) => check.id,
@@ -127,7 +164,7 @@ export function defaultCheckProfile() {
 
 export function subscribedCheckProfile() {
   return {
-    checkIds: [...ALL_CHECK_IDS],
+    checkIds: [...PUBLIC_CHECK_IDS, "dkim", "domain"],
     cadence: "weekly" as Cadence,
   };
 }

@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  Box,
   FileText,
   LayoutGrid,
   LogOut,
@@ -33,6 +34,12 @@ function navItems(slug: string) {
   return [
     { to: "/w/$slug" as const, label: "Overview", icon: LayoutGrid, params: { slug } },
     {
+      to: "/w/$slug/assets" as const,
+      label: "Assets",
+      icon: Box,
+      params: { slug },
+    },
+    {
       to: "/w/$slug/exposure" as const,
       label: "External Exposure",
       icon: Shield,
@@ -61,11 +68,18 @@ function NavLinks({
       <nav className="grid gap-0.5">
         {navItems(slug).map((item) => {
           const href =
-            item.to === "/w/$slug" ? `/w/${slug}` : `/w/${slug}/exposure`;
+            item.to === "/w/$slug"
+              ? `/w/${slug}`
+              : item.to === "/w/$slug/assets"
+                ? `/w/${slug}/assets`
+                : `/w/${slug}/exposure`;
           const active =
             item.to === "/w/$slug"
               ? pathname === href
-              : pathname.startsWith(href);
+              : item.to === "/w/$slug/assets"
+                ? pathname.startsWith(href)
+                : pathname.startsWith(`/w/${slug}/exposure`) ||
+                  pathname.startsWith(`/w/${slug}/runbooks`);
           const Icon = item.icon;
           return (
             <Link

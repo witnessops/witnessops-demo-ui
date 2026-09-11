@@ -25,7 +25,7 @@ export function ObservationList({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-fg">{obs.name}</p>
-                <StatusPill status={obs.status} />
+                <StatusPill status={obs.status} label={obs.statusLabel} />
               </div>
               <p className="mt-1 text-xs text-fg-subtle">{obs.category}</p>
               <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">

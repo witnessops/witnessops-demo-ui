@@ -16,12 +16,17 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as SaveRouteImport } from './routes/save'
 import { Route as WSlugRouteImport } from './routes/w/$slug'
 import { Route as WSlugIndexRouteImport } from './routes/w/$slug/index'
+import { Route as WSlugAssetsRouteImport } from './routes/w/$slug/assets'
 import { Route as WSlugExposureRouteImport } from './routes/w/$slug/exposure'
 import { Route as WSlugMembersRouteImport } from './routes/w/$slug/members'
+import { Route as WSlugRunbooksRouteImport } from './routes/w/$slug/runbooks'
 import { Route as WSlugSettingsRouteImport } from './routes/w/$slug/settings'
+import { Route as WSlugAssetsAssetIdRouteImport } from './routes/w/$slug/assets_.$assetId'
+import { Route as WSlugAssetsNewRouteImport } from './routes/w/$slug/assets_.new'
 import { Route as WSlugExposureRunIdRouteImport } from './routes/w/$slug/exposure_.$runId'
 import { Route as WSlugExposureNewRouteImport } from './routes/w/$slug/exposure_.new'
 import { Route as WSlugReportsReportIdRouteImport } from './routes/w/$slug/reports.$reportId'
+import { Route as WSlugRunbooksRunbookIdRouteImport } from './routes/w/$slug/runbooks_.$runbookId'
 import { Route as WSlugExposureRunIdObsIdRouteImport } from './routes/w/$slug/exposure_.$runId_.$obsId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +64,11 @@ const WSlugIndexRoute = WSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => WSlugRoute,
 } as any)
+const WSlugAssetsRoute = WSlugAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => WSlugRoute,
+} as any)
 const WSlugExposureRoute = WSlugExposureRouteImport.update({
   id: '/exposure',
   path: '/exposure',
@@ -69,9 +79,24 @@ const WSlugMembersRoute = WSlugMembersRouteImport.update({
   path: '/members',
   getParentRoute: () => WSlugRoute,
 } as any)
+const WSlugRunbooksRoute = WSlugRunbooksRouteImport.update({
+  id: '/runbooks',
+  path: '/runbooks',
+  getParentRoute: () => WSlugRoute,
+} as any)
 const WSlugSettingsRoute = WSlugSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => WSlugRoute,
+} as any)
+const WSlugAssetsAssetIdRoute = WSlugAssetsAssetIdRouteImport.update({
+  id: '/assets_/$assetId',
+  path: '/assets/$assetId',
+  getParentRoute: () => WSlugRoute,
+} as any)
+const WSlugAssetsNewRoute = WSlugAssetsNewRouteImport.update({
+  id: '/assets_/new',
+  path: '/assets/new',
   getParentRoute: () => WSlugRoute,
 } as any)
 const WSlugExposureRunIdRoute = WSlugExposureRunIdRouteImport.update({
@@ -89,6 +114,11 @@ const WSlugReportsReportIdRoute = WSlugReportsReportIdRouteImport.update({
   path: '/reports/$reportId',
   getParentRoute: () => WSlugRoute,
 } as any)
+const WSlugRunbooksRunbookIdRoute = WSlugRunbooksRunbookIdRouteImport.update({
+  id: '/runbooks_/$runbookId',
+  path: '/runbooks/$runbookId',
+  getParentRoute: () => WSlugRoute,
+} as any)
 const WSlugExposureRunIdObsIdRoute = WSlugExposureRunIdObsIdRouteImport.update({
   id: '/exposure_/$runId_/$obsId',
   path: '/exposure/$runId/$obsId',
@@ -102,13 +132,18 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/save': typeof SaveRoute
   '/w/$slug': typeof WSlugRouteWithChildren
+  '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
+  '/w/$slug/assets/$assetId': typeof WSlugAssetsAssetIdRoute
+  '/w/$slug/assets/new': typeof WSlugAssetsNewRoute
   '/w/$slug/exposure/$runId': typeof WSlugExposureRunIdRoute
   '/w/$slug/exposure/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
+  '/w/$slug/runbooks/$runbookId': typeof WSlugRunbooksRunbookIdRoute
   '/w/$slug/exposure/$runId/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
 export interface FileRoutesByTo {
@@ -117,13 +152,18 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/save': typeof SaveRoute
+  '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug': typeof WSlugIndexRoute
+  '/w/$slug/assets/$assetId': typeof WSlugAssetsAssetIdRoute
+  '/w/$slug/assets/new': typeof WSlugAssetsNewRoute
   '/w/$slug/exposure/$runId': typeof WSlugExposureRunIdRoute
   '/w/$slug/exposure/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
+  '/w/$slug/runbooks/$runbookId': typeof WSlugRunbooksRunbookIdRoute
   '/w/$slug/exposure/$runId/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
 export interface FileRoutesById {
@@ -134,13 +174,18 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/save': typeof SaveRoute
   '/w/$slug': typeof WSlugRouteWithChildren
+  '/w/$slug/assets': typeof WSlugAssetsRoute
   '/w/$slug/exposure': typeof WSlugExposureRoute
   '/w/$slug/members': typeof WSlugMembersRoute
+  '/w/$slug/runbooks': typeof WSlugRunbooksRoute
   '/w/$slug/settings': typeof WSlugSettingsRoute
   '/w/$slug/': typeof WSlugIndexRoute
+  '/w/$slug/assets_/$assetId': typeof WSlugAssetsAssetIdRoute
+  '/w/$slug/assets_/new': typeof WSlugAssetsNewRoute
   '/w/$slug/exposure_/$runId': typeof WSlugExposureRunIdRoute
   '/w/$slug/exposure_/new': typeof WSlugExposureNewRoute
   '/w/$slug/reports/$reportId': typeof WSlugReportsReportIdRoute
+  '/w/$slug/runbooks_/$runbookId': typeof WSlugRunbooksRunbookIdRoute
   '/w/$slug/exposure_/$runId_/$obsId': typeof WSlugExposureRunIdObsIdRoute
 }
 export interface FileRouteTypes {
@@ -152,13 +197,18 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/save'
     | '/w/$slug'
+    | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug/'
+    | '/w/$slug/assets/$assetId'
+    | '/w/$slug/assets/new'
     | '/w/$slug/exposure/$runId'
     | '/w/$slug/exposure/new'
     | '/w/$slug/reports/$reportId'
+    | '/w/$slug/runbooks/$runbookId'
     | '/w/$slug/exposure/$runId/$obsId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -167,13 +217,18 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/save'
+    | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug'
+    | '/w/$slug/assets/$assetId'
+    | '/w/$slug/assets/new'
     | '/w/$slug/exposure/$runId'
     | '/w/$slug/exposure/new'
     | '/w/$slug/reports/$reportId'
+    | '/w/$slug/runbooks/$runbookId'
     | '/w/$slug/exposure/$runId/$obsId'
   id:
     | '__root__'
@@ -183,13 +238,18 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/save'
     | '/w/$slug'
+    | '/w/$slug/assets'
     | '/w/$slug/exposure'
     | '/w/$slug/members'
+    | '/w/$slug/runbooks'
     | '/w/$slug/settings'
     | '/w/$slug/'
+    | '/w/$slug/assets_/$assetId'
+    | '/w/$slug/assets_/new'
     | '/w/$slug/exposure_/$runId'
     | '/w/$slug/exposure_/new'
     | '/w/$slug/reports/$reportId'
+    | '/w/$slug/runbooks_/$runbookId'
     | '/w/$slug/exposure_/$runId_/$obsId'
   fileRoutesById: FileRoutesById
 }
@@ -253,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugIndexRouteImport
       parentRoute: typeof WSlugRoute
     }
+    '/w/$slug/assets': {
+      id: '/w/$slug/assets'
+      path: '/assets'
+      fullPath: '/w/$slug/assets'
+      preLoaderRoute: typeof WSlugAssetsRouteImport
+      parentRoute: typeof WSlugRoute
+    }
     '/w/$slug/exposure': {
       id: '/w/$slug/exposure'
       path: '/exposure'
@@ -267,11 +334,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugMembersRouteImport
       parentRoute: typeof WSlugRoute
     }
+    '/w/$slug/runbooks': {
+      id: '/w/$slug/runbooks'
+      path: '/runbooks'
+      fullPath: '/w/$slug/runbooks'
+      preLoaderRoute: typeof WSlugRunbooksRouteImport
+      parentRoute: typeof WSlugRoute
+    }
     '/w/$slug/settings': {
       id: '/w/$slug/settings'
       path: '/settings'
       fullPath: '/w/$slug/settings'
       preLoaderRoute: typeof WSlugSettingsRouteImport
+      parentRoute: typeof WSlugRoute
+    }
+    '/w/$slug/assets_/$assetId': {
+      id: '/w/$slug/assets_/$assetId'
+      path: '/assets/$assetId'
+      fullPath: '/w/$slug/assets/$assetId'
+      preLoaderRoute: typeof WSlugAssetsAssetIdRouteImport
+      parentRoute: typeof WSlugRoute
+    }
+    '/w/$slug/assets_/new': {
+      id: '/w/$slug/assets_/new'
+      path: '/assets/new'
+      fullPath: '/w/$slug/assets/new'
+      preLoaderRoute: typeof WSlugAssetsNewRouteImport
       parentRoute: typeof WSlugRoute
     }
     '/w/$slug/exposure_/$runId': {
@@ -295,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WSlugReportsReportIdRouteImport
       parentRoute: typeof WSlugRoute
     }
+    '/w/$slug/runbooks_/$runbookId': {
+      id: '/w/$slug/runbooks_/$runbookId'
+      path: '/runbooks/$runbookId'
+      fullPath: '/w/$slug/runbooks/$runbookId'
+      preLoaderRoute: typeof WSlugRunbooksRunbookIdRouteImport
+      parentRoute: typeof WSlugRoute
+    }
     '/w/$slug/exposure_/$runId_/$obsId': {
       id: '/w/$slug/exposure_/$runId_/$obsId'
       path: '/exposure/$runId/$obsId'
@@ -306,24 +401,34 @@ declare module '@tanstack/react-router' {
 }
 
 interface WSlugRouteChildren {
+  WSlugAssetsRoute: typeof WSlugAssetsRoute
   WSlugExposureRoute: typeof WSlugExposureRoute
   WSlugMembersRoute: typeof WSlugMembersRoute
+  WSlugRunbooksRoute: typeof WSlugRunbooksRoute
   WSlugSettingsRoute: typeof WSlugSettingsRoute
   WSlugIndexRoute: typeof WSlugIndexRoute
+  WSlugAssetsAssetIdRoute: typeof WSlugAssetsAssetIdRoute
+  WSlugAssetsNewRoute: typeof WSlugAssetsNewRoute
   WSlugExposureRunIdRoute: typeof WSlugExposureRunIdRoute
   WSlugExposureNewRoute: typeof WSlugExposureNewRoute
   WSlugReportsReportIdRoute: typeof WSlugReportsReportIdRoute
+  WSlugRunbooksRunbookIdRoute: typeof WSlugRunbooksRunbookIdRoute
   WSlugExposureRunIdObsIdRoute: typeof WSlugExposureRunIdObsIdRoute
 }
 
 const WSlugRouteChildren: WSlugRouteChildren = {
+  WSlugAssetsRoute: WSlugAssetsRoute,
   WSlugExposureRoute: WSlugExposureRoute,
   WSlugMembersRoute: WSlugMembersRoute,
+  WSlugRunbooksRoute: WSlugRunbooksRoute,
   WSlugSettingsRoute: WSlugSettingsRoute,
   WSlugIndexRoute: WSlugIndexRoute,
+  WSlugAssetsAssetIdRoute: WSlugAssetsAssetIdRoute,
+  WSlugAssetsNewRoute: WSlugAssetsNewRoute,
   WSlugExposureRunIdRoute: WSlugExposureRunIdRoute,
   WSlugExposureNewRoute: WSlugExposureNewRoute,
   WSlugReportsReportIdRoute: WSlugReportsReportIdRoute,
+  WSlugRunbooksRunbookIdRoute: WSlugRunbooksRunbookIdRoute,
   WSlugExposureRunIdObsIdRoute: WSlugExposureRunIdObsIdRoute,
 }
 

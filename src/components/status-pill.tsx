@@ -14,10 +14,12 @@ export function StatusPill({
   status,
   className,
   onPaper = false,
+  label,
 }: {
   status: ObservationStatus;
   className?: string;
   onPaper?: boolean;
+  label?: string;
 }) {
   const variant = onPaper
     ? ({
@@ -29,7 +31,7 @@ export function StatusPill({
     : statusVariant[status];
   return (
     <Badge variant={variant} className={className}>
-      {statusLabel(status)}
+      {label ?? statusLabel(status)}
     </Badge>
   );
 }

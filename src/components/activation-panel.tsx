@@ -26,15 +26,16 @@ export function ActivationPanel({
         Keep this workspace active
       </h2>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Keep your external observations, history and reports in one workspace.
-        The snapshot you already have stays as it is.
+        Keep assets, reusable runbooks and saved evidence in one workspace. The
+        snapshot you already have stays as it is.
       </p>
       {compact ? null : (
         <ul className="mt-4 grid gap-1.5 text-sm text-fg-muted">
-          <li>Configurable public checks</li>
-          <li>Saved immutable runs</li>
+          <li>Assets</li>
+          <li>Reusable runbooks</li>
+          <li>Saved runs</li>
           <li>Change history</li>
-          <li>Buyer-readable reports</li>
+          <li>Reports</li>
           <li>Workspace members</li>
           <li>Repeat checks</li>
         </ul>

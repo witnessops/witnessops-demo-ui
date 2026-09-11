@@ -122,9 +122,8 @@ function SavePage() {
                   workspaceId={saved.workspaceId}
                   onActivated={() =>
                     void navigate({
-                      to: "/w/$slug/exposure/new",
+                      to: "/w/$slug/assets",
                       params: { slug: saved.slug },
-                      search: { edit: true },
                     })
                   }
                   onContinue={() =>
