@@ -2,7 +2,7 @@
 
 Practical map from this prototype to existing WitnessOps systems.
 
-**Integration correction — 2026-09-20 (RF-TAIL-DEMO-001).** `apps/witnessops-app` already exists in `witnessops-web`; its [README at the inspected revision](https://github.com/witnessops/witnessops-web/blob/ec7aa61f2641d073a7f1ea3dfb744b04ac35c29c/apps/witnessops-app/README.md) names this prototype's `4887c0fc5f2ac6742de0f4c9e11cb11e8603ade4` revision as its UX reference. Continue in that existing application; do not scaffold a second app from this guide.
+**Integration correction — 2026-09-20 (RF-TAIL-DEMO-001).** `apps/witnessops-app` already exists in `witnessops/witnessops-web`; its [README at the inspected revision](https://github.com/witnessops/witnessops-web/blob/ec7aa61f2641d073a7f1ea3dfb744b04ac35c29c/apps/witnessops-app/README.md) names this prototype's `4887c0fc5f2ac6742de0f4c9e11cb11e8603ade4` revision as its UX reference. Continue in that existing application; do not scaffold a second app from this guide.
 
 This correction establishes source existence and the recorded UX reference, not deployment or completion of every product capability. The remaining mappings and backlog are retained prototype-era analysis, not a freshly assessed delivery checklist. Consult the current owning app documentation and accepted scope before implementation; historical V1 exclusions here do not override them.
 
@@ -138,7 +138,7 @@ These may inform later architecture and escalation. They are a different executi
 | Public hostname snapshot checks, IDs, statuses, methods | `witnessops-web` External Exposure contract |
 | Public API constraints | `createExternalExposureHandler` |
 | Snapshot JSON shape | `ExternalSnapshotV1` |
-| Customer workspace UX | this prototype is a UX reference; the existing `witnessops-web/apps/witnessops-app` and its owning documentation govern implementation |
+| Customer workspace UX | this prototype is a UX reference; the existing `apps/witnessops-app` in repository `witnessops/witnessops-web` and its owning documentation govern implementation |
 | Governed operator workflows | `witnessops-offsec` |
 | Product vs OFFSEC execution | Keep separate. Reuse contracts, not the OFFSEC executor |
 
@@ -174,7 +174,7 @@ A future app run of Web Exposure against a hostname should call the **same snaps
 
 **Historical backlog, not current implementation status.** Item 1 is corrected below; items 2–8 must be reconciled against the existing app before treating them as missing work.
 
-1. Use the existing `apps/witnessops-app` in the witnessops-web monorepo; the earlier absence claim is superseded by the source readback above.
+1. Use the existing `apps/witnessops-app` in repository `witnessops/witnessops-web`; the earlier absence claim is superseded by the source readback above.
 2. Workspace / membership / asset persistence
 3. A server path that reuses snapshot execution primitives **without** widening the public endpoint
 4. Persist `ExternalSnapshotV1` as the run source; UI remains a projection
@@ -183,7 +183,7 @@ A future app run of Web Exposure against a hostname should call the **same snaps
 7. Declared API contract + drift test for app routes
 8. Honest free-to-paid boundary (save snapshot vs repeat/history)
 
-Original prototype-era V1 exclusions (historical, not current product approval): billing, RLS theatre, OFFSEC receipts in the customer UI, runbook marketplace.
+The [original prototype-era V1 exclusions](https://github.com/witnessops/witnessops-demo-ui/blob/4887c0fc5f2ac6742de0f4c9e11cb11e8603ade4/docs/WITNESSOPS_ALIGNMENT.md#8-what-needs-to-be-built-for-the-authenticated-product) remain historical reference, not current product approval.
 
 ---
 
@@ -208,7 +208,7 @@ Original prototype-era V1 exclusions (historical, not current product approval):
 
 Historical migration outline, not a fresh instruction to repeat implemented work. Reconcile the remaining steps against the existing app and its current contracts first:
 
-1. Continue in the existing `apps/witnessops-app` beside `apps/witnessops-web`; do not create a duplicate application.
+1. Continue in the existing `apps/witnessops-app` beside `apps/witnessops-web` in repository `witnessops/witnessops-web`; do not create a duplicate application.
 2. Extract or import `external-exposure/contracts.ts` (and later the runner) as a shared package. Do not copy a second check taxonomy.
 3. Keep `POST /api/external-exposure` as the public hostname snapshot. Add **new** authenticated routes for workspace runs. Put those routes in a declared API inventory with a drift test.
 4. Persist the runner’s `ExternalSnapshotV1` as the source artifact for each hostname run. Derive the customer observation list from it.
